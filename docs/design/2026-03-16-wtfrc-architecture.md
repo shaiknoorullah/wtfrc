@@ -925,43 +925,151 @@ wtfrc doctor                  # Check health: Ollama running, DB exists, etc.
 
 ## 14. Build & Distribution
 
-### 14.1 Language Choice
+### 14.1 Language & Stack
 
-**Python** (primary consideration):
-- Fastest to develop
-- Rich ecosystem for CLI (click/typer), SQLite, HTTP clients
-- Ollama has a Python SDK
-- Easy to package (pip, pipx)
-- AUR packaging is trivial for Python tools
+**Go** with the Charm ecosystem.
 
-**Rust** (future consideration for performance):
-- Would matter for coach mode (real-time shell interception)
-- Could rewrite hot paths later
-- "Written in Rust" is a community credibility signal
+| Component | Library | Purpose |
+|-----------|---------|---------|
+| **TUI framework** | [Bubble Tea](https://github.com/charmbracelet/bubbletea) | Interactive popup REPL, coach messages, tutor dashboard |
+| **Styling** | [Lip Gloss](https://github.com/charmbracelet/lipgloss) | Colors, borders, layout — matches the ricing aesthetic |
+| **Components** | [Bubbles](https://github.com/charmbracelet/bubbles) | Text input, viewport (scrolling answers), spinners, tables |
+| **Forms** | [Huh](https://github.com/charmbracelet/huh) | Setup wizard, config init prompts |
+| **Markdown** | [Glamour](https://github.com/charmbracelet/glamour) | Render formatted answers with syntax highlighting |
+| **Logging** | [Log](https://github.com/charmbracelet/log) | Structured, pretty logging |
+| **CLI framework** | [Cobra](https://github.com/spf13/cobra) | Subcommands (ask, index, coach, train, supervise, etc.) |
+| **Config** | [Viper](https://github.com/spf13/viper) | TOML config parsing |
+| **SQLite** | [go-sqlite3](https://github.com/mattn/go-sqlite3) or [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Knowledge base, sessions, usage tracking (CGo-free option available) |
+| **HTTP client** | `net/http` (stdlib) | Ollama API, OpenAI-compatible API calls |
+| **SSE streaming** | `bufio.Scanner` on response body | Stream LLM responses token-by-token |
+| **File watching** | [fsnotify](https://github.com/fsnotify/fsnotify) | Auto re-index on config changes |
+| **Release** | [GoReleaser](https://goreleaser.com/) | Cross-compiled binaries, AUR, Homebrew, Nix, Snap |
+| **Hero GIF** | [VHS](https://github.com/charmbracelet/vhs) | Record terminal demos for README |
 
-**Recommendation for v0.1:** Python. Ship fast. Rewrite in Rust if/when performance matters.
+**Why Go over Python/Rust:**
+- **Single binary.** No runtime dependencies. `curl | sh` installs one file. No `pip`, no venv, no version conflicts.
+- **Startup in milliseconds.** The popup must feel instant — Go cold-starts in ~5ms, Python takes 100-300ms.
+- **Charm ecosystem.** Purpose-built for beautiful terminal UIs. The popup will look stunning out of the box.
+- **Concurrency for coach mode.** Go's goroutines handle IPC socket subscriptions (i3, hyprland, tmux) natively. No async/await complexity.
+- **Cross-compilation.** `GOOS=linux GOARCH=amd64 go build` — one binary per platform. GoReleaser automates this for releases.
+- **Community credibility.** The target audience respects Go CLI tools (lazygit, fzf, gum are all Go + Charm).
 
-### 14.2 Package Distribution
+**CGo consideration:** Prefer `modernc.org/sqlite` (pure Go SQLite) over `mattn/go-sqlite3` (requires CGo). Pure Go means truly zero dependencies and cleaner cross-compilation. FTS5 is supported in both.
+
+### 14.2 Project Structure
+
+```
+wtfrc/
+├── cmd/
+│   └── wtfrc/
+│       └── main.go              # Entry point
+├── internal/
+│   ├── cli/                     # Cobra command definitions
+│   │   ├── root.go
+│   │   ├── ask.go               # wtfrc ask
+│   │   ├── index.go             # wtfrc index
+│   │   ├── search.go            # wtfrc search
+│   │   ├── coach.go             # wtfrc coach (v0.2)
+│   │   ├── train.go             # wtfrc train (v1.0)
+│   │   ├── supervise.go         # wtfrc supervise
+│   │   ├── stats.go             # wtfrc stats
+│   │   ├── doctor.go            # wtfrc doctor
+│   │   └── config.go            # wtfrc config
+│   ├── indexer/
+│   │   ├── indexer.go           # Orchestrates parsing + enrichment
+│   │   ├── manifest.go          # Change detection (SHA-256)
+│   │   ├── redactor.go          # Secret stripping
+│   │   └── parsers/
+│   │       ├── parser.go        # Parser interface
+│   │       ├── i3.go
+│   │       ├── hyprland.go
+│   │       ├── tmux.go
+│   │       ├── kitty.go
+│   │       ├── shell.go         # zsh/bash aliases, functions, exports
+│   │       ├── git.go
+│   │       ├── ssh.go
+│   │       ├── nvim.go
+│   │       ├── vscode.go
+│   │       ├── systemd.go
+│   │       └── generic.go       # Fallback line-by-line parser
+│   ├── kb/                      # Knowledge Base
+│   │   ├── db.go                # SQLite schema, migrations
+│   │   ├── search.go            # FTS5 query logic
+│   │   └── models.go            # Entry, Intent, Session, Query types
+│   ├── llm/                     # LLM abstraction layer
+│   │   ├── provider.go          # Provider interface
+│   │   ├── ollama.go            # Ollama implementation
+│   │   ├── openai_compat.go     # OpenAI-compatible implementation
+│   │   └── streaming.go         # SSE streaming helpers
+│   ├── tui/                     # Bubble Tea models
+│   │   ├── ask.go               # Popup REPL model
+│   │   ├── styles.go            # Lip Gloss theme
+│   │   └── components/
+│   │       ├── input.go         # Query input with history
+│   │       ├── answer.go        # Streaming answer viewport
+│   │       └── source.go        # Source file reference display
+│   ├── session/
+│   │   ├── manager.go           # Session lifecycle
+│   │   └── archive.go           # JSONL archival
+│   ├── supervisor/
+│   │   ├── supervisor.go        # Review logic
+│   │   └── report.go            # Report generation
+│   ├── coach/                   # v0.2
+│   │   ├── watcher.go           # Event interception orchestrator
+│   │   ├── shell_hook.go        # zsh preexec integration
+│   │   ├── i3_ipc.go            # i3/sway IPC subscriber
+│   │   ├── hyprland_ipc.go      # Hyprland socket subscriber
+│   │   ├── roast.go             # Roast message generation
+│   │   └── modes.go             # Chill/moderate/strict logic
+│   ├── tutor/                   # v1.0
+│   │   ├── tracker.go           # Usage event recording
+│   │   ├── analytics.go         # Efficiency scoring
+│   │   ├── adoption.go          # Keybind adoption curves
+│   │   ├── report.go            # Weekly report generation
+│   │   └── goals.go             # Learning goals
+│   └── config/
+│       └── config.go            # Viper config loading
+├── configs/
+│   └── default.toml             # Default config template
+├── docs/
+│   └── design/
+│       └── 2026-03-16-wtfrc-architecture.md
+├── scripts/
+│   ├── install.sh               # curl installer
+│   └── zsh-hook.zsh             # Coach mode shell hook (v0.2)
+├── go.mod
+├── go.sum
+├── .goreleaser.yml
+├── Makefile
+├── LICENSE
+└── README.md
+```
+
+### 14.3 Package Distribution
 
 | Channel | Command | Priority |
 |---------|---------|----------|
-| **pipx** | `pipx install wtfrc` | Day 1 |
-| **pip** | `pip install wtfrc` | Day 1 |
-| **AUR** | `yay -S wtfrc` | Day 1 (critical for target audience) |
-| **Homebrew** | `brew install wtfrc` | Week 1 |
+| **curl** | `curl -sf https://wtfrc.sh/install \| sh` | Day 1 |
+| **go install** | `go install github.com/shaiknoorullah/wtfrc/cmd/wtfrc@latest` | Day 1 |
+| **AUR** | `yay -S wtfrc-bin` | Day 1 (critical for target audience) |
+| **Homebrew** | `brew install shaiknoorullah/tap/wtfrc` | Day 1 (via GoReleaser) |
 | **Nix** | `nix profile install wtfrc` | Week 2 |
-| **curl** | `curl -sf wtfrc.sh/install \| sh` | Week 1 |
+| **Scoop** | `scoop install wtfrc` | Week 2 (Windows) |
+| **GitHub Releases** | Pre-built binaries for linux/mac/windows amd64/arm64 | Day 1 (via GoReleaser) |
 
-### 14.3 Dependencies
+### 14.4 Dependencies
 
-**Required:**
-- Python 3.11+
-- SQLite 3.35+ (for FTS5 — ships with Python)
-- Ollama (for local LLM — can be installed by `wtfrc doctor --fix`)
+**Runtime:** None. Single static binary.
+
+**Build-time:**
+- Go 1.22+
+- GoReleaser (for releases)
+
+**External (user must have):**
+- Ollama (for local LLM — `wtfrc doctor --fix` can install it)
 
 **Optional:**
 - An OpenAI-compatible API key (for strong LLM features)
-- inotifywait (for file watcher on Linux)
 
 ---
 
