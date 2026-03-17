@@ -139,19 +139,7 @@ auto_discover = true
 
 The indexer maintains a manifest of previously indexed files with their SHA-256 hashes and modification timestamps.
 
-```
-~/.local/share/wtfrc/manifest.json
-{
-  "files": {
-    "~/.config/i3/config": {
-      "sha256": "abc123...",
-      "mtime": "2026-03-15T10:30:00Z",
-      "last_indexed": "2026-03-15T10:35:00Z",
-      "entry_count": 47
-    }
-  }
-}
-```
+The manifest is stored in the SQLite database (see §4.1 `manifest` table). A single source of truth avoids drift between file-based and DB-based state.
 
 **On re-index:**
 1. Scan all configured paths
@@ -191,17 +179,39 @@ Supported parsers:
 | `cron_parser` | crontab -l output | Schedule + command |
 | `generic_parser` | Any file | Line-by-line, best-effort extraction |
 
-Each parser outputs a list of `RawEntry` objects:
+Each parser implements the `Parser` interface and outputs a slice of `RawEntry` structs:
 
-```typescript
-interface RawEntry {
-  tool: string;           // "i3", "tmux", "zsh", etc.
-  type: "keybind" | "alias" | "function" | "export" | "setting" | "service" | "host";
-  raw_binding: string;    // "$mod+Shift+q" or "alias k=kitty"
-  raw_action: string;     // "kill" or "kitty"
-  source_file: string;    // absolute path
-  source_line: number;    // line number in file
-  context_lines: string;  // surrounding lines for LLM context
+```go
+// Parser is the interface every config parser must implement.
+type Parser interface {
+    // Name returns the tool identifier (e.g. "i3", "tmux", "zsh").
+    Name() string
+    // CanParse returns true if this parser handles the given file path.
+    CanParse(path string) bool
+    // Parse reads a config file and returns extracted entries.
+    Parse(path string) ([]RawEntry, error)
+}
+
+type EntryType string
+
+const (
+    EntryKeybind  EntryType = "keybind"
+    EntryAlias    EntryType = "alias"
+    EntryFunction EntryType = "function"
+    EntryExport   EntryType = "export"
+    EntrySetting  EntryType = "setting"
+    EntryService  EntryType = "service"
+    EntryHost     EntryType = "host"
+)
+
+type RawEntry struct {
+    Tool         string    // "i3", "tmux", "zsh", etc.
+    Type         EntryType // keybind, alias, function, etc.
+    RawBinding   string    // "$mod+Shift+q" or "alias k=kitty"
+    RawAction    string    // "kill" or "kitty"
+    SourceFile   string    // absolute path
+    SourceLine   int       // line number in file
+    ContextLines string    // surrounding lines for LLM context
 }
 ```
 
@@ -291,11 +301,34 @@ CREATE TABLE intents (
   phrase TEXT NOT NULL                   -- "close window", "kill focused window", etc.
 );
 
--- Full-text search index on intents
+-- Full-text search index on intents (external content — requires sync triggers)
 CREATE VIRTUAL TABLE intents_fts USING fts5(phrase, content=intents, content_rowid=id);
 
--- Full-text search on descriptions
+-- Full-text search on descriptions (external content — requires sync triggers)
 CREATE VIRTUAL TABLE entries_fts USING fts5(description, content=entries, content_rowid=id);
+
+-- Triggers to keep FTS5 external-content tables in sync
+CREATE TRIGGER intents_ai AFTER INSERT ON intents BEGIN
+  INSERT INTO intents_fts(rowid, phrase) VALUES (new.id, new.phrase);
+END;
+CREATE TRIGGER intents_ad AFTER DELETE ON intents BEGIN
+  INSERT INTO intents_fts(intents_fts, rowid, phrase) VALUES('delete', old.id, old.phrase);
+END;
+CREATE TRIGGER intents_au AFTER UPDATE ON intents BEGIN
+  INSERT INTO intents_fts(intents_fts, rowid, phrase) VALUES('delete', old.id, old.phrase);
+  INSERT INTO intents_fts(rowid, phrase) VALUES (new.id, new.phrase);
+END;
+
+CREATE TRIGGER entries_ai AFTER INSERT ON entries BEGIN
+  INSERT INTO entries_fts(rowid, description) VALUES (new.id, new.description);
+END;
+CREATE TRIGGER entries_ad AFTER DELETE ON entries BEGIN
+  INSERT INTO entries_fts(entries_fts, rowid, description) VALUES('delete', old.id, old.description);
+END;
+CREATE TRIGGER entries_au AFTER UPDATE ON entries BEGIN
+  INSERT INTO entries_fts(entries_fts, rowid, description) VALUES('delete', old.id, old.description);
+  INSERT INTO entries_fts(rowid, description) VALUES (new.id, new.description);
+END;
 
 -- File manifest for change tracking
 CREATE TABLE manifest (
@@ -330,15 +363,18 @@ CREATE TABLE queries (
   issues TEXT                           -- JSON: ["hallucinated_keybind", "wrong_tool", etc.]
 );
 
--- Usage events (stub for v0.2 coach mode)
+-- Usage events (stub for v0.2 coach mode, extended in v1.0)
 CREATE TABLE usage_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tool TEXT NOT NULL,                    -- "zsh", "i3", "tmux"
+  action_type TEXT NOT NULL DEFAULT '',  -- "command", "keybind", "mouse", "menu" (v1.0)
   action TEXT NOT NULL,                  -- what the user actually did
   optimal_action TEXT,                   -- what they should have done (if different)
   entry_id INTEGER REFERENCES entries(id),
   timestamp TEXT NOT NULL,
-  coached INTEGER DEFAULT 0             -- 1 = coach message was shown
+  was_optimal INTEGER NOT NULL DEFAULT 0, -- 1 = used best available method
+  coached INTEGER DEFAULT 0,             -- 1 = coach message was shown
+  time_saved_ms INTEGER                  -- estimated time saved/wasted (v1.0)
 );
 
 -- Supervisor runs
@@ -379,8 +415,7 @@ For coach mode (v0.2), the lookup is reversed:
 
 ```
 ~/.local/share/wtfrc/
-├── wtfrc.db              # Main SQLite database
-├── manifest.json         # File change tracking (also in DB, JSON for human inspection)
+├── wtfrc.db              # Main SQLite database (includes manifest table)
 └── archive/
     └── sessions-2026-03.jsonl   # Archived sessions (rotated monthly)
 ```
@@ -393,34 +428,67 @@ A provider-agnostic interface for calling LLMs. Supports Ollama (local) and any 
 
 ### 5.1 Interface
 
-```typescript
-interface LLMProvider {
-  name: string;
-
-  // Generate a completion
-  complete(request: CompletionRequest): Promise<CompletionResponse>;
-
-  // Stream a completion (for popup display)
-  stream(request: CompletionRequest): AsyncIterable<string>;
-
-  // Check if provider is available
-  healthCheck(): Promise<boolean>;
+```go
+// Provider is the interface for any LLM backend (Ollama, OpenAI-compat, etc.).
+type Provider interface {
+    // Name returns the provider identifier (e.g. "ollama", "openai-compat").
+    Name() string
+    // Complete generates a full completion.
+    Complete(ctx context.Context, req CompletionRequest) (CompletionResponse, error)
+    // Stream generates a streaming completion. Tokens are sent to the channel;
+    // the channel is closed when the response is complete.
+    Stream(ctx context.Context, req CompletionRequest) (<-chan string, error)
+    // HealthCheck returns nil if the provider is reachable.
+    HealthCheck(ctx context.Context) error
 }
 
-interface CompletionRequest {
-  system?: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-  max_tokens?: number;
-  temperature?: number;
-  response_format?: "text" | "json";
+type Message struct {
+    Role    string // "user" or "assistant"
+    Content string
 }
 
-interface CompletionResponse {
-  content: string;
-  model: string;
-  usage: { prompt_tokens: number; completion_tokens: number };
-  latency_ms: number;
+type ResponseFormat string
+
+const (
+    FormatText ResponseFormat = "text"
+    FormatJSON ResponseFormat = "json"
+)
+
+type CompletionRequest struct {
+    System         string         // system prompt (optional, empty = none)
+    Messages       []Message
+    MaxTokens      int            // 0 = provider default
+    Temperature    float64        // 0 = provider default
+    ResponseFormat ResponseFormat // "text" or "json"
 }
+
+type TokenUsage struct {
+    PromptTokens     int
+    CompletionTokens int
+}
+
+type CompletionResponse struct {
+    Content   string
+    Model     string
+    Usage     TokenUsage
+    LatencyMs int64
+}
+```
+
+### 5.1.1 Structured Output Parsing
+
+When `ResponseFormat` is `FormatJSON`, the LLM may still return malformed JSON. All callers that expect structured output must:
+
+1. Attempt `json.Unmarshal` into the expected struct
+2. On failure, retry once with an explicit repair prompt: `"Your previous response was not valid JSON. Return ONLY valid JSON matching this schema: {schema}"`
+3. If retry also fails, return an error — never silently degrade to unstructured text
+
+This is implemented as a helper:
+
+```go
+// CompleteJSON sends a JSON-mode completion and unmarshals the response.
+// Retries once with a repair prompt on malformed JSON.
+func CompleteJSON[T any](ctx context.Context, p Provider, req CompletionRequest) (T, error)
 ```
 
 ### 5.2 Provider Implementations
@@ -626,7 +694,7 @@ A scheduled process that reviews session quality and optimizes the system.
 
 The supervisor reads recent sessions (since last run) and evaluates:
 
-1. **Answer accuracy:** Did the LLM cite real entries from the Knowledge Base, or hallucinate?
+1. **Answer accuracy:** Did the LLM cite real entries from the Knowledge Base, or hallucinate? (see §8.5 Hallucination Detection)
 2. **Answer completeness:** Did it miss relevant entries that exist in the index?
 3. **Response time:** Are any queries abnormally slow? (flag for investigation)
 4. **Index gaps:** Are users asking about things not in the index? (suggest new scan paths)
@@ -653,6 +721,36 @@ The supervisor can:
 3. **Tune system prompts** → If hallucination rate is high, tighten the "don't hallucinate" instruction
 4. **Identify stale entries** → If a config file was deleted but entries remain, flag for cleanup
 5. **Generate a report** → Human-readable summary written to `~/.local/share/wtfrc/reports/`
+
+### 8.5 Hallucination Detection
+
+The supervisor detects hallucinations via two mechanisms:
+
+**1. Entry ID verification (deterministic, no LLM):**
+
+Each query logs the `entries_used` IDs. The supervisor verifies:
+- Every cited entry ID exists in the `entries` table
+- The answer text references keybinds/aliases that match the cited entries' `raw_binding`/`raw_action` values
+- If the answer mentions a specific keybind (e.g., `$mod+Shift+e`) but no cited entry contains it → flagged as potential hallucination
+
+```go
+// VerifyAnswer checks that all keybinds/aliases mentioned in the answer
+// actually exist in the cited KB entries. Returns a list of hallucinated references.
+func VerifyAnswer(answer string, citedEntries []KBEntry) []string
+```
+
+**2. LLM cross-check (for ambiguous cases):**
+
+For answers where deterministic verification is inconclusive (e.g., the answer paraphrases rather than quoting), the Strong LLM is asked:
+
+```
+Given this user question, the LLM's answer, and the KB entries that were provided as context:
+- Does the answer contain any keybinds, aliases, or config values NOT present in the KB entries?
+- Does the answer contradict any of the KB entries?
+Return: {accurate: bool, hallucinated_refs: [...], contradictions: [...]}
+```
+
+The deterministic check runs on every query during supervisor review. The LLM cross-check only runs on queries where the deterministic check is inconclusive or where `entries_used` is empty but the answer claims to cite specific config values.
 
 ### 8.4 Scheduling
 
@@ -719,63 +817,72 @@ Longer-term analytics:
 
 ## 10. Data Models
 
-### 10.1 Knowledge Base Entry (full)
+All models are Go structs. Pointer fields (`*string`, `*int`) indicate nullable columns in SQLite.
 
-```typescript
-interface KBEntry {
-  id: number;
-  tool: string;
-  type: "keybind" | "alias" | "function" | "export" | "setting" | "service" | "host" | "script";
-  raw_binding: string | null;
-  raw_action: string | null;
-  description: string;
-  intents: string[];
-  source_file: string;
-  source_line: number;
-  category: string;
-  see_also: string[] | null;
-  indexed_at: string;
-  file_hash: string;
+### 10.1 Knowledge Base Entry
+
+```go
+type KBEntry struct {
+    ID          int64
+    Tool        string     // "i3", "tmux", "zsh", etc.
+    Type        EntryType  // keybind, alias, function, etc.
+    RawBinding  *string    // "$mod+Shift+q" — nil for non-keybind entries
+    RawAction   *string    // "kill" — nil when not applicable
+    Description string     // LLM-generated human description
+    Intents     []string   // populated via JOIN on intents table
+    SourceFile  string
+    SourceLine  int
+    Category    string     // "window_management", "navigation", etc.
+    SeeAlso     []string   // related entry hints (JSON array in DB)
+    IndexedAt   time.Time
+    FileHash    string     // SHA-256 of source file at index time
 }
 ```
 
-### 10.2 Session (full)
+### 10.2 Session & Query
 
-```typescript
-interface Session {
-  id: string;              // UUID
-  started_at: string;
-  ended_at: string | null;
-  queries: Query[];
-  model_used: string;
+```go
+type Session struct {
+    ID        string     // UUID
+    StartedAt time.Time
+    EndedAt   *time.Time // nil while session is open
+    Queries   []Query    // populated on load, not stored inline
+    ModelUsed string     // "ollama:gemma3:4b", "claude-sonnet", etc.
 }
 
-interface Query {
-  id: number;
-  session_id: string;
-  question: string;
-  answer: string;
-  entries_used: number[];  // KB entry IDs
-  response_time_ms: number;
-  timestamp: string;
-  accuracy_score: number | null;  // Set by supervisor
-  issues: string[] | null;        // Set by supervisor
+type Query struct {
+    ID             int64
+    SessionID      string
+    Question       string
+    Answer         string
+    EntriesUsed    []int64    // KB entry IDs (JSON array in DB)
+    ResponseTimeMs int64
+    Timestamp      time.Time
+    AccuracyScore  *float64   // 0.0–1.0, set by supervisor
+    Issues         []string   // ["hallucinated_keybind", ...], set by supervisor
 }
 ```
 
 ### 10.3 Usage Event (v0.2+)
 
-```typescript
-interface UsageEvent {
-  id: number;
-  tool: string;
-  action: string;
-  optimal_action: string | null;
-  entry_id: number | null;
-  timestamp: string;
-  coached: boolean;
+Single model for all usage tracking — covers both Coach (v0.2) and Tutor (v1.0) needs.
+
+```go
+type UsageEvent struct {
+    ID            int64
+    Tool          string     // "zsh", "i3", "tmux", "nvim"
+    ActionType    string     // "command", "keybind", "mouse", "menu" (v1.0 field, empty in v0.2)
+    Action        string     // what the user actually did
+    OptimalAction *string    // what they should have done (nil if action was already optimal)
+    EntryID       *int64     // linked KB entry (nil if no match)
+    Timestamp     time.Time
+    WasOptimal    bool       // did they use the best available method?
+    Coached       bool       // true if a coach message was shown for this event
+    TimeSavedMs   *int64     // estimated time saved/wasted (v1.0 field, nil in v0.2)
 }
 ```
+
+This replaces the earlier `UsageRecord` TypeScript interface from the v1.0 vision section. The SQL `usage_events` table (§4.1) maps directly to this struct — `ActionType`, `WasOptimal`, and `TimeSavedMs` columns are added with defaults (`""`, `false`, `NULL`) so v0.2 code doesn't need to set them.
 
 ---
 
@@ -939,7 +1046,7 @@ wtfrc doctor                  # Check health: Ollama running, DB exists, etc.
 | **Logging** | [Log](https://github.com/charmbracelet/log) | Structured, pretty logging |
 | **CLI framework** | [Cobra](https://github.com/spf13/cobra) | Subcommands (ask, index, coach, train, supervise, etc.) |
 | **Config** | [Viper](https://github.com/spf13/viper) | TOML config parsing |
-| **SQLite** | [go-sqlite3](https://github.com/mattn/go-sqlite3) or [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Knowledge base, sessions, usage tracking (CGo-free option available) |
+| **SQLite** | [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Knowledge base, sessions, usage tracking (pure Go, no CGo) |
 | **HTTP client** | `net/http` (stdlib) | Ollama API, OpenAI-compatible API calls |
 | **SSE streaming** | `bufio.Scanner` on response body | Stream LLM responses token-by-token |
 | **File watching** | [fsnotify](https://github.com/fsnotify/fsnotify) | Auto re-index on config changes |
@@ -954,7 +1061,7 @@ wtfrc doctor                  # Check health: Ollama running, DB exists, etc.
 - **Cross-compilation.** `GOOS=linux GOARCH=amd64 go build` — one binary per platform. GoReleaser automates this for releases.
 - **Community credibility.** The target audience respects Go CLI tools (lazygit, fzf, gum are all Go + Charm).
 
-**CGo consideration:** Prefer `modernc.org/sqlite` (pure Go SQLite) over `mattn/go-sqlite3` (requires CGo). Pure Go means truly zero dependencies and cleaner cross-compilation. FTS5 is supported in both.
+**SQLite choice:** `modernc.org/sqlite` (pure Go). No CGo means truly zero build dependencies and clean cross-compilation. FTS5 is fully supported.
 
 ### 14.2 Project Structure
 
@@ -1205,20 +1312,7 @@ The Tutor breaks this cycle by providing objective, data-driven feedback.
     └── active-goals.json     # User-set learning goals
 ```
 
-**Usage data schema (per event):**
-
-```typescript
-interface UsageRecord {
-  timestamp: string;
-  tool: string;              // "zsh", "i3", "tmux", "nvim"
-  action_type: string;       // "command", "keybind", "mouse", "menu"
-  action_raw: string;        // What the user actually did
-  action_optimal: string | null;  // What they should have done (if different)
-  entry_id: number | null;   // Linked KB entry
-  was_optimal: boolean;      // Did they use the best available method?
-  time_saved_ms: number | null;   // Estimated time saved/wasted
-}
-```
+**Usage data schema:** Uses the `UsageEvent` struct defined in §10.3 — the same model serves both Coach (v0.2) and Tutor (v1.0). The v1.0-specific fields (`ActionType`, `TimeSavedMs`) are populated by the Tutor's enhanced tracking; v0.2 leaves them at their zero values.
 
 **Core tutor features:**
 
@@ -1336,13 +1430,13 @@ The core tracking and scoring works with zero LLM — it's just counting optimal
 - [ ] Indexer with change detection and semantic enrichment
 - [ ] Knowledge Base (SQLite + FTS5)
 - [ ] Responder (interactive REPL popup)
-- [ ] Session manager (stateless + stay-open)
+- [ ] Session manager (in-session context window + archival)
 - [ ] Supervisor (scheduled review, accuracy scoring)
 - [ ] CLI interface (ask, index, search, list, supervise, stats, doctor)
 - [ ] Config format (TOML)
 - [ ] Privacy: secret redaction, offline mode
 - [ ] README with hero GIF
-- [ ] AUR + pip + pipx packages
+- [ ] AUR + Homebrew + go install + curl installer
 - [ ] `wtfrc setup` one-command installer
 
 ### v0.2 — "Coach"
