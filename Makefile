@@ -1,4 +1,4 @@
-.PHONY: build test lint clean
+.PHONY: build test lint clean release
 
 build:
 	go build -o bin/wtfrc ./cmd/wtfrc
@@ -11,3 +11,6 @@ lint:
 
 clean:
 	rm -rf bin/
+
+release:
+	goreleaser release --clean
