@@ -11,9 +11,14 @@ var rootCmd = &cobra.Command{
 semantic knowledge base, then answers natural-language questions about
 your setup using a local LLM.
 
+  wtfrc ask        Ask questions about your setup (one-shot or REPL)
   wtfrc index      Index your config files
-  wtfrc ask        Ask questions about your setup
-  wtfrc search     Search the knowledge base directly`,
+  wtfrc search     Search the knowledge base (FTS, no LLM)
+  wtfrc list       List all entries in the knowledge base
+  wtfrc stats      Show knowledge base and usage statistics
+  wtfrc doctor     Run health checks on your setup
+  wtfrc config     View or initialize the config file
+  wtfrc supervise  Run supervisor hallucination review`,
 }
 
 func Execute() error {
