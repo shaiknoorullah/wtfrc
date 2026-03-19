@@ -1,0 +1,64 @@
+name: Nightly
+
+on:
+  push:
+    branches: [develop]
+  schedule:
+    - cron: "0 2 * * *" # 2 AM UTC daily
+
+permissions:
+  contents: write
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./... -count=1 -race
+
+      - name: Set nightly version
+        id: version
+        run: |
+          DATE=$(date +%Y%m%d)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=nightly-${DATE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          for GOOS in linux darwin; do
+            for GOARCH in amd64 arm64; do
+              OUTPUT="dist/wtfrc_${GOOS}_${GOARCH}"
+              [ "$GOOS" = "windows" ] && OUTPUT="${OUTPUT}.exe"
+              CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH \
+                go build -ldflags "-s -w -X main.version=${VERSION}" \
+                -o "$OUTPUT" ./cmd/wtfrc
+            done
+          done
+          cd dist && sha256sum wtfrc_* > checksums.txt
+
+      - name: Update nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly (${{ steps.version.outputs.version }})"
+          body: |
+            Automated nightly build from `develop` branch.
+
+            **Commit:** ${{ github.sha }}
+            **Date:** ${{ steps.version.outputs.version }}
+
+            > These builds may be unstable. Use tagged releases for production.
+          prerelease: true
+          make_latest: false
+          files: dist/*
+          token: ${{ secrets.GITHUB_TOKEN }}
