@@ -15,11 +15,7 @@
 
 ---
 
-I have a problem. I spend entire weekends configuring systems I'll never fully use. My `.zshrc` is 400 lines. My i3 config has keybindings I've literally never pressed. I once wrote 12 shell aliases for kubectl and then kept typing `kubectl get pods` for six months straight.
-
-So naturally, instead of just reading my own config files, I built an entire AI-powered CLI tool with 11 parsers, a semantic knowledge base, FTS5 search, GPU-aware model selection, and a hallucination detection supervisor.
-
-This is peak over-engineering. But at least now I can *ask* my computer what I configured instead of pretending I remember.
+Everyone knows real engineers don't `grep`. Real engineers build a local AI with 11 config parsers, a SQLite knowledge base with full-text search, secret redaction for files that never leave your machine, and a hallucination detector that catches the AI making up keybindings you definitely didn't set. `grep` could never. `grep` also would've taken 2 seconds but that's not the point.
 
 **wtfrc** indexes your dotfiles, configs, and keybindings into a local knowledge base and answers questions about your own setup. No cloud. No telemetry. Your configs never leave your machine. Just a local LLM reading the files you refuse to read yourself.
 
