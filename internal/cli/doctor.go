@@ -99,6 +99,20 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		return newProvider(d.Cfg.LLM.Strong).HealthCheck(ctx)
 	})
 
+	// GPU / model recommendation
+	fmt.Fprintln(os.Stdout)
+	fmt.Fprintln(os.Stdout, headerStyle.Render("Model recommendation"))
+	fmt.Fprintln(os.Stdout)
+
+	vramMB := detectVRAM()
+	if vramMB > 0 {
+		model, reason := recommendedModel(vramMB)
+		fmt.Fprintf(os.Stdout, "  Recommended enrichment model: %s (%s)\n", model, reason)
+	} else {
+		fmt.Fprintln(os.Stdout, "  No NVIDIA GPU detected (nvidia-smi not available).")
+		fmt.Fprintln(os.Stdout, "  Default recommendation: qwen2.5-coder:7b (if you have >=8GB VRAM)")
+	}
+
 	fmt.Fprintln(os.Stdout)
 	if allOK {
 		fmt.Fprintln(os.Stdout, passStyle.Render("All checks passed."))

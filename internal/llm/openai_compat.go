@@ -241,6 +241,10 @@ func (p *OpenAICompatProvider) buildRequestBody(req CompletionRequest, stream bo
 
 	if req.ResponseFormat == FormatJSON {
 		body.ResponseFormat = &openaiRespFmt{Type: "json_object"}
+	} else if req.ResponseFormat != nil && req.ResponseFormat != FormatText && req.ResponseFormat != ResponseFormat("") {
+		// A JSON schema object (map) — OpenAI-compat doesn't support structured
+		// output schemas, so fall back to generic JSON mode.
+		body.ResponseFormat = &openaiRespFmt{Type: "json_object"}
 	}
 
 	return body

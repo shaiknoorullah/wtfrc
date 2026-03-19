@@ -60,7 +60,7 @@ func TestLLMEnricherSingleBatch(t *testing.T) {
 	provider := &mockLLMProvider{}
 	enricher := NewLLMEnricher(provider)
 
-	// Create 5 entries (well under the 30 batch limit).
+	// Create 5 entries (well under the 10 batch limit).
 	var entries []parsers.RawEntry
 	for i := 0; i < 5; i++ {
 		entries = append(entries, parsers.RawEntry{
@@ -106,9 +106,9 @@ func TestLLMEnricherMultipleBatches(t *testing.T) {
 	provider := &mockLLMProvider{}
 	enricher := NewLLMEnricher(provider)
 
-	// Create 60 entries — should result in 2 batches.
+	// Create 30 entries — should result in 3 batches of 10.
 	var entries []parsers.RawEntry
-	for i := 0; i < 60; i++ {
+	for i := 0; i < 30; i++ {
 		entries = append(entries, parsers.RawEntry{
 			Tool:       "i3",
 			Type:       parsers.EntryKeybind,
@@ -125,13 +125,13 @@ func TestLLMEnricherMultipleBatches(t *testing.T) {
 		t.Fatalf("Enrich: %v", err)
 	}
 
-	if len(enriched) != 60 {
-		t.Fatalf("expected 60 enriched entries, got %d", len(enriched))
+	if len(enriched) != 30 {
+		t.Fatalf("expected 30 enriched entries, got %d", len(enriched))
 	}
 
-	// Should be exactly 2 LLM calls (30 + 30).
-	if provider.calls != 2 {
-		t.Errorf("expected 2 LLM calls for 60 entries, got %d", provider.calls)
+	// Should be exactly 3 LLM calls (10 + 10 + 10).
+	if provider.calls != 3 {
+		t.Errorf("expected 3 LLM calls for 30 entries, got %d", provider.calls)
 	}
 }
 
@@ -139,9 +139,9 @@ func TestLLMEnricherExactBatchBoundary(t *testing.T) {
 	provider := &mockLLMProvider{}
 	enricher := NewLLMEnricher(provider)
 
-	// Create exactly 30 entries — should be 1 batch.
+	// Create exactly 10 entries — should be 1 batch (matches maxBatchSize).
 	var entries []parsers.RawEntry
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 10; i++ {
 		entries = append(entries, parsers.RawEntry{
 			Tool:       "zsh",
 			Type:       parsers.EntryAlias,
@@ -158,11 +158,11 @@ func TestLLMEnricherExactBatchBoundary(t *testing.T) {
 		t.Fatalf("Enrich: %v", err)
 	}
 
-	if len(enriched) != 30 {
-		t.Fatalf("expected 30 enriched entries, got %d", len(enriched))
+	if len(enriched) != 10 {
+		t.Fatalf("expected 10 enriched entries, got %d", len(enriched))
 	}
 	if provider.calls != 1 {
-		t.Errorf("expected 1 LLM call for exactly 30 entries, got %d", provider.calls)
+		t.Errorf("expected 1 LLM call for exactly 10 entries, got %d", provider.calls)
 	}
 }
 

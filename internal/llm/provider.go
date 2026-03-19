@@ -26,7 +26,7 @@ type CompletionRequest struct {
 	Messages       []Message
 	MaxTokens      int
 	Temperature    float64
-	ResponseFormat ResponseFormat
+	ResponseFormat any // string constant (FormatJSON/FormatText) or a JSON schema (map[string]any)
 }
 
 type TokenUsage struct {

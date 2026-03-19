@@ -26,14 +26,36 @@ var setupCmd = &cobra.Command{
 		}
 		logger.Info("Config directory", "path", cfgDir)
 
-		// Step 2: Write default config if not exists
+		// Step 2: Detect VRAM and recommend model
+		vramMB := detectVRAM()
+		recommendedOllamaModel := "qwen2.5-coder:7b" // default recommendation
+		if vramMB > 0 {
+			model, reason := recommendedModel(vramMB)
+			recommendedOllamaModel = model
+			fmt.Printf("Your GPU has ~%dGB VRAM. We recommend %s for enrichment.\n",
+				vramMB/1024, model)
+			_ = reason
+		} else {
+			fmt.Println("No NVIDIA GPU detected. Defaulting to qwen2.5-coder:7b for enrichment.")
+		}
+
+		// Step 3: Write default config if not exists
 		cfgFile := filepath.Join(cfgDir, "config.toml")
 		if _, statErr := os.Stat(cfgFile); statErr != nil {
 			defaultCfg, err := os.ReadFile("configs/default.toml")
 			if err != nil {
 				defaultCfg = []byte("# wtfrc configuration\n# Run 'wtfrc config' to edit\n")
 			}
-			if err := os.WriteFile(cfgFile, defaultCfg, 0o644); err != nil {
+			// Replace the strong LLM section with the recommended Ollama model
+			cfgStr := string(defaultCfg)
+			if !strings.Contains(cfgStr, "[llm.strong]") {
+				// Append an Ollama-based strong LLM section
+				cfgStr += fmt.Sprintf("\n[llm.strong]\nprovider = \"ollama\"\nmodel = %q\n", recommendedOllamaModel)
+			} else {
+				// Replace existing strong section model with recommended
+				cfgStr = replaceStrongModel(cfgStr, recommendedOllamaModel)
+			}
+			if err := os.WriteFile(cfgFile, []byte(cfgStr), 0o644); err != nil {
 				return fmt.Errorf("write default config: %w", err)
 			}
 			logger.Info("Default config written", "path", cfgFile)
@@ -41,7 +63,7 @@ var setupCmd = &cobra.Command{
 			logger.Info("Config already exists", "path", cfgFile)
 		}
 
-		// Step 3: Scan for known configs
+		// Step 4: Scan for known configs
 		home, _ := os.UserHomeDir()
 		knownConfigs := discoverConfigs(home)
 		if len(knownConfigs) > 0 {
@@ -53,7 +75,7 @@ var setupCmd = &cobra.Command{
 			logger.Warn("No config files discovered")
 		}
 
-		// Step 4: Check Ollama
+		// Step 5: Check Ollama
 		d, err := newDeps()
 		if err != nil {
 			logger.Warn("Could not initialize dependencies", "error", err)
@@ -74,7 +96,7 @@ var setupCmd = &cobra.Command{
 			logger.Info("Ollama is running")
 		}
 
-		// Step 5: Run initial index if we have configs
+		// Step 6: Run initial index if we have configs
 		if len(knownConfigs) > 0 {
 			logger.Info("Running initial index...")
 			enricher := indexer.NewLLMEnricher(d.StrongLLM)
@@ -98,6 +120,42 @@ var setupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
+}
+
+// replaceStrongModel replaces the [llm.strong] section's provider and model
+// with the recommended Ollama model.
+func replaceStrongModel(cfg, model string) string {
+	lines := strings.Split(cfg, "\n")
+	var result []string
+	inStrong := false
+	replaced := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "[llm.strong]" {
+			inStrong = true
+			result = append(result, line)
+			result = append(result, fmt.Sprintf("provider = \"ollama\""))
+			result = append(result, fmt.Sprintf("model = %q", model))
+			replaced = true
+			continue
+		}
+		if inStrong {
+			// Skip old provider/model/base_url/api_key_env lines in [llm.strong]
+			if strings.HasPrefix(trimmed, "provider") ||
+				strings.HasPrefix(trimmed, "model") ||
+				strings.HasPrefix(trimmed, "base_url") ||
+				strings.HasPrefix(trimmed, "api_key_env") {
+				continue
+			}
+			// Any new section header ends [llm.strong]
+			if strings.HasPrefix(trimmed, "[") {
+				inStrong = false
+			}
+		}
+		result = append(result, line)
+	}
+	_ = replaced
+	return strings.Join(result, "\n")
 }
 
 func discoverConfigs(home string) []string {

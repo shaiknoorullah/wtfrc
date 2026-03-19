@@ -35,6 +35,7 @@ type ollamaChatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
 	Stream   bool      `json:"stream"`
+	Format   any       `json:"format,omitempty"`
 }
 
 // ollamaChatResponse is the JSON returned from a non-streaming /api/chat call.
@@ -65,6 +66,10 @@ func (o *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (C
 		Model:    o.Model,
 		Messages: msgs,
 		Stream:   false,
+	}
+
+	if req.ResponseFormat != nil {
+		payload.Format = req.ResponseFormat
 	}
 
 	body, err := json.Marshal(payload)
@@ -109,6 +114,10 @@ func (o *OllamaProvider) Stream(ctx context.Context, req CompletionRequest) (<-c
 		Model:    o.Model,
 		Messages: msgs,
 		Stream:   true,
+	}
+
+	if req.ResponseFormat != nil {
+		payload.Format = req.ResponseFormat
 	}
 
 	body, err := json.Marshal(payload)

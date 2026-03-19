@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/shaiknoorullah/wtfrc/internal/indexer/parsers"
 	"github.com/shaiknoorullah/wtfrc/internal/llm"
 )
 
-const maxBatchSize = 30
+const maxBatchSize = 10
 
 // LLMEnricher uses an LLM provider to generate descriptions, intents,
 // categories, and see_also references for parsed config entries.
@@ -29,7 +30,9 @@ type enrichmentResponse struct {
 }
 
 // Enrich generates enriched metadata for the given raw entries by sending
-// them to the LLM in batches of up to 30.
+// them to the LLM in batches of up to maxBatchSize. If a batch fails even
+// after retry, fallback enrichments are generated from the raw data so that
+// indexing can continue.
 func (e *LLMEnricher) Enrich(ctx context.Context, entries []parsers.RawEntry) ([]EnrichedEntry, error) {
 	if len(entries) == 0 {
 		return nil, nil
@@ -45,7 +48,10 @@ func (e *LLMEnricher) Enrich(ctx context.Context, entries []parsers.RawEntry) ([
 
 		enriched, err := e.enrichBatch(ctx, batch)
 		if err != nil {
-			return nil, fmt.Errorf("enrich batch %d-%d: %w", i, end-1, err)
+			// Batch failed even after retry — generate fallback enrichments
+			// from the raw entry data so that indexing can continue.
+			log.Printf("WARNING: enrichment failed for batch %d-%d, using fallback: %v", i, end-1, err)
+			enriched = fallbackEnrichments(batch)
 		}
 		all = append(all, enriched...)
 	}
@@ -74,7 +80,25 @@ The entries array MUST have exactly the same number of elements as the input, in
 		Temperature: 0.3,
 	}
 
-	req.ResponseFormat = llm.FormatJSON
+	req.ResponseFormat = map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"entries": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"description": map[string]any{"type": "string"},
+						"intents":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+						"category":    map[string]any{"type": "string"},
+						"see_also":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					},
+					"required": []string{"description", "intents", "category"},
+				},
+			},
+		},
+		"required": []string{"entries"},
+	}
 	resp, err := e.provider.Complete(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("llm complete: %w", err)
@@ -108,6 +132,20 @@ The entries array MUST have exactly the same number of elements as the input, in
 	}
 
 	return result, nil
+}
+
+// fallbackEnrichments generates basic enrichment data from raw entries when
+// the LLM fails to produce valid output.
+func fallbackEnrichments(entries []parsers.RawEntry) []EnrichedEntry {
+	result := make([]EnrichedEntry, len(entries))
+	for i, e := range entries {
+		result[i] = EnrichedEntry{
+			Description: fmt.Sprintf("%s %s %s", e.Tool, e.RawBinding, e.RawAction),
+			Intents:     []string{e.RawBinding},
+			Category:    "uncategorized",
+		}
+	}
+	return result
 }
 
 func buildEnrichmentPrompt(entries []parsers.RawEntry) string {
