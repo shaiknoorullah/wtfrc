@@ -1,0 +1,81 @@
+# wtfrc configuration
+
+[general]
+# Name shown in popup header and coach messages
+assistant_name = "wtfrc"
+
+[indexer]
+# Paths to scan for config files
+scan_paths = [
+  "~/.config/i3/config",
+  "~/.config/hypr/hyprland.conf",
+  "~/.config/kitty/kitty.conf",
+  "~/.tmux.conf",
+  "~/.zshrc",
+  "~/.gitconfig",
+  "~/.ssh/config",
+]
+# Auto-discover configs in ~/.config/
+auto_discover = true
+# Paths to exclude from auto-discovery
+exclude_paths = [
+  "~/.config/chromium",
+  "~/.config/Code/Cache",
+]
+# File watcher for automatic re-indexing
+watch = false                    # Enable inotify/fswatch watcher
+# Re-index schedule (if watch = false)
+reindex_schedule = "daily"
+
+[llm.fast]
+provider = "ollama"
+model = "gemma3:4b"
+
+[llm.strong]
+# Used for indexing (requires reliable JSON output).
+# wtfrc setup auto-selects the best model for your GPU.
+provider = "ollama"
+model = "qwen2.5-coder:7b"
+# Or use a cloud provider:
+# provider = "openai-compat"
+# base_url = "https://api.deepseek.com"
+# api_key_env = "DEEPSEEK_API_KEY"
+# model = "deepseek-chat"
+
+[popup]
+# UI frontend for the ask command
+frontend = "term"                # "term", "rofi", "tmux" (future)
+# Max KB entries to include as LLM context
+max_context_entries = 10
+# Max conversation history in session
+max_history = 5
+
+[session]
+# Retention in SQLite before archiving
+retain_days = 90
+# Archive format
+archive_format = "jsonl"
+
+[supervisor]
+enabled = true
+schedule = "daily"
+model_tier = "strong"
+retain_reports = 30
+
+[privacy]
+# Patterns to always redact from index
+redact_patterns = [
+  "sk-",
+  "xoxb-",
+  "ghp_",
+  "password",
+  "secret",
+  "token",
+]
+# Never index these files
+never_index = [
+  "~/.ssh/id_*",
+  "~/.gnupg/",
+  "~/.aws/credentials",
+  "**/.env",
+]

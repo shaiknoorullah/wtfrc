@@ -1,0 +1,41 @@
+version: 2
+
+project_name: wtfrc
+
+builds:
+  - main: ./cmd/wtfrc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+
+brews:
+  - repository:
+      owner: shaiknoorullah
+      name: homebrew-tap
+    homepage: "https://github.com/shaiknoorullah/wtfrc"
+    description: "AI that reads your dotfiles so you don't have to"
+
+aurs:
+  - name: wtfrc-bin
+    homepage: "https://github.com/shaiknoorullah/wtfrc"
+    description: "AI that reads your dotfiles so you don't have to"
+    license: MIT
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/wtfrc-bin.git"
