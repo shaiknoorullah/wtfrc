@@ -12,6 +12,7 @@ wtfrc indexes your dotfiles, configs, and keybindings into a local semantic know
 - **LLM-agnostic** — works with Ollama, Groq, OpenRouter, or any OpenAI-compatible API.
 - **Privacy-first** — API keys, SSH paths, and secrets are automatically redacted before indexing.
 - **Offline capable** — fallback chain gracefully handles unreachable providers.
+- **GPU-aware** — auto-detects VRAM and recommends the best local model for your hardware.
 - **11 parsers** — i3/sway, Hyprland, tmux, kitty, zsh/bash, git, SSH, nvim, VS Code, systemd, plus a generic fallback.
 - **Semantic search** — FTS5-powered search across intents and descriptions, not just raw text.
 - **Supervisor** — built-in hallucination detection verifies answers against the knowledge base.
@@ -35,7 +36,7 @@ brew install shaiknoorullah/tap/wtfrc
 ## Quick Start
 
 ```bash
-# First-run setup (detects configs, pulls Ollama model, runs initial index)
+# First-run setup (detects GPU, recommends model, indexes configs)
 wtfrc setup
 
 # Or manually:
@@ -55,7 +56,7 @@ wtfrc search "query"    FTS search (no LLM)
 wtfrc list              List all indexed entries
 wtfrc list --tool tmux  Filter by tool
 wtfrc stats             Show index and session statistics
-wtfrc doctor            Health check (Ollama, DB, config)
+wtfrc doctor            Health check + GPU model recommendation
 wtfrc config            Open config in $EDITOR
 wtfrc config --init     Generate default config
 wtfrc supervise         Run hallucination review
@@ -84,18 +85,27 @@ windowrulev2 = center, class:^(wtfrc)$
 
 ## Configuration
 
-Config lives at `~/.config/wtfrc/config.toml`. Generate the default with `wtfrc config --init`.
+Config lives at `~/.config/wtfrc/config.toml`. Generate the default with `wtfrc config --init`. `wtfrc setup` auto-detects your GPU and picks the right model.
 
 ```toml
 [llm.fast]
 provider = "ollama"
-model = "gemma3:4b"
+model = "gemma3:4b"          # Used for ask (streaming answers)
 
 [llm.strong]
-provider = "openai-compat"
-base_url = "https://api.groq.com/openai/v1"
-api_key_env = "GROQ_API_KEY"
-model = "llama-3.1-8b-instant"
+provider = "ollama"
+model = "qwen2.5-coder:7b"  # Used for indexing (JSON enrichment)
+# Auto-selected by wtfrc setup based on your GPU:
+#   ≤4GB VRAM  → qwen2.5-coder:3b
+#   ≤8GB VRAM  → qwen2.5-coder:7b
+#   ≤16GB VRAM → qwen2.5-coder:14b
+#   24GB+ VRAM → qwen2.5-coder:32b
+#
+# Or use a cloud provider:
+# provider = "openai-compat"
+# model = "deepseek-chat"
+# base_url = "https://api.deepseek.com"
+# api_key_env = "DEEPSEEK_API_KEY"
 
 [privacy]
 redact_patterns = ["sk-", "xoxb-", "ghp_", "password", "secret", "token"]
