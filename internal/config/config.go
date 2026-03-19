@@ -71,10 +71,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("llm.fast.provider", "ollama")
 	v.SetDefault("llm.fast.model", "gemma3:4b")
 
-	v.SetDefault("llm.strong.provider", "openai-compat")
-	v.SetDefault("llm.strong.model", "claude-sonnet-4-20250514")
-	v.SetDefault("llm.strong.base_url", "https://api.anthropic.com/v1")
-	v.SetDefault("llm.strong.api_key_env", "ANTHROPIC_API_KEY")
+	v.SetDefault("llm.strong.provider", "ollama")
+	v.SetDefault("llm.strong.model", "qwen2.5-coder:7b")
 
 	v.SetDefault("popup.frontend", "term")
 	v.SetDefault("popup.max_context_entries", 10)
