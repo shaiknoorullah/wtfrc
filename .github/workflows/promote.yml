@@ -1,0 +1,61 @@
+name: Promote to Main
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./... -count=1 -race
+
+      - name: Create promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v${{ github.event.inputs.version }}"
+
+          # Generate changelog from develop commits not yet in main
+          CHANGELOG=$(git log main..develop --pretty=format:"- %s" --no-merges)
+
+          gh pr create \
+            --base main \
+            --head develop \
+            --title "release: ${VERSION}" \
+            --body "$(cat <<EOF
+          ## Release ${VERSION}
+
+          Promoting \`develop\` to \`main\` for release.
+
+          ### Changes since last release
+
+          ${CHANGELOG}
+
+          ### Post-merge
+
+          After merging, tag the release:
+          \`\`\`bash
+          git checkout main && git pull
+          git tag ${VERSION}
+          git push origin ${VERSION}
+          \`\`\`
+          EOF
+          )"
