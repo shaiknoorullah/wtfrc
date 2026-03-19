@@ -59,7 +59,7 @@ func runIndex(cmd *cobra.Command, args []string) error {
 	}
 
 	redact := indexer.NewRedactor(d.Cfg.Privacy.RedactPatterns)
-	enricher := indexer.NewLLMEnricher(d.FastLLM)
+	enricher := indexer.NewLLMEnricher(d.StrongLLM)
 	idx := indexer.New(d.DB, enricher, redact)
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))

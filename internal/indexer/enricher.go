@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -73,13 +74,28 @@ The entries array MUST have exactly the same number of elements as the input, in
 		Temperature: 0.3,
 	}
 
-	resp, err := llm.CompleteJSON[enrichmentResponse](ctx, e.provider, req)
+	req.ResponseFormat = llm.FormatJSON
+	resp, err := e.provider.Complete(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("llm complete: %w", err)
 	}
 
-	// Pad or truncate to match input length.
-	result := resp.Entries
+	result, err := parseEnrichmentResponse(resp.Content)
+	if err != nil {
+		// Retry once with a correction prompt
+		req.Messages = append(req.Messages,
+			llm.Message{Role: "assistant", Content: resp.Content},
+			llm.Message{Role: "user", Content: "Your previous response was not valid JSON. Respond with raw JSON only — no markdown, no code fences. Use this exact format: [{\"description\":\"...\",\"intents\":[\"...\"],\"category\":\"...\",\"see_also\":[\"...\"]}]"},
+		)
+		resp, err = e.provider.Complete(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("llm retry: %w", err)
+		}
+		result, err = parseEnrichmentResponse(resp.Content)
+		if err != nil {
+			return nil, fmt.Errorf("parse after retry: %w", err)
+		}
+	}
 	for len(result) < len(entries) {
 		result = append(result, EnrichedEntry{
 			Description: fmt.Sprintf("%s %s %s", entries[len(result)].Tool, entries[len(result)].Type, entries[len(result)].RawBinding),
@@ -109,4 +125,34 @@ func buildEnrichmentPrompt(entries []parsers.RawEntry) string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+// parseEnrichmentResponse handles both {"entries": [...]} and bare [...] formats,
+// and strips markdown code fences that small models like to add.
+func parseEnrichmentResponse(content string) ([]EnrichedEntry, error) {
+	content = strings.TrimSpace(content)
+	// Strip markdown code fences
+	if strings.HasPrefix(content, "```") {
+		if i := strings.Index(content, "\n"); i != -1 {
+			content = content[i+1:]
+		}
+		if i := strings.LastIndex(content, "```"); i != -1 {
+			content = content[:i]
+		}
+		content = strings.TrimSpace(content)
+	}
+
+	// Try {"entries": [...]}
+	var wrapped enrichmentResponse
+	if err := json.Unmarshal([]byte(content), &wrapped); err == nil && len(wrapped.Entries) > 0 {
+		return wrapped.Entries, nil
+	}
+
+	// Try bare [...]
+	var arr []EnrichedEntry
+	if err := json.Unmarshal([]byte(content), &arr); err == nil {
+		return arr, nil
+	}
+
+	return nil, fmt.Errorf("could not parse LLM response as enrichment JSON")
 }

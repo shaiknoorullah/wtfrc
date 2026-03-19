@@ -77,7 +77,7 @@ var setupCmd = &cobra.Command{
 		// Step 5: Run initial index if we have configs
 		if len(knownConfigs) > 0 {
 			logger.Info("Running initial index...")
-			enricher := indexer.NewLLMEnricher(d.FastLLM)
+			enricher := indexer.NewLLMEnricher(d.StrongLLM)
 			redactor := indexer.NewRedactor(d.Cfg.Privacy.RedactPatterns)
 			idx := indexer.New(d.DB, enricher, redactor)
 
