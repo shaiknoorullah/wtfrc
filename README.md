@@ -15,11 +15,13 @@
 
 ---
 
-You spent 3 hours ricing your i3 config. You added 47 keybindings to kitty. You wrote shell aliases for things you'll use "all the time." That was six months ago. You remember maybe four of them.
+I have a problem. I spend entire weekends configuring systems I'll never fully use. My `.zshrc` is 400 lines. My i3 config has keybindings I've literally never pressed. I once wrote 12 shell aliases for kubectl and then kept typing `kubectl get pods` for six months straight.
 
-**wtfrc** indexes your dotfiles, configs, and keybindings into a local knowledge base and answers questions about your own setup — because you clearly aren't going to read those files yourself.
+So naturally, instead of just reading my own config files, I built an entire AI-powered CLI tool with 11 parsers, a semantic knowledge base, FTS5 search, GPU-aware model selection, and a hallucination detection supervisor.
 
-No cloud. No telemetry. Everything runs locally via Ollama. Your configs never leave your machine.
+This is peak over-engineering. But at least now I can *ask* my computer what I configured instead of pretending I remember.
+
+**wtfrc** indexes your dotfiles, configs, and keybindings into a local knowledge base and answers questions about your own setup. No cloud. No telemetry. Your configs never leave your machine. Just a local LLM reading the files you refuse to read yourself.
 
 ## The Problem
 
