@@ -215,10 +215,10 @@ func scanQueries(rows interface {
 		q.AccuracyScore = accScore
 
 		if entriesJSON != nil && *entriesJSON != "" {
-			json.Unmarshal([]byte(*entriesJSON), &q.EntriesUsed)
+			_ = json.Unmarshal([]byte(*entriesJSON), &q.EntriesUsed)
 		}
 		if issuesJSON != nil && *issuesJSON != "" {
-			json.Unmarshal([]byte(*issuesJSON), &q.Issues)
+			_ = json.Unmarshal([]byte(*issuesJSON), &q.Issues)
 		}
 
 		queries = append(queries, q)

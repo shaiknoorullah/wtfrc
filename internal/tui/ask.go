@@ -179,7 +179,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.answer.Clear()
 			m.state = stateLoading
 			m.err = nil
-			return m, m.searchKB(query)
+			cmd := m.searchKB(query)
+			return m, cmd
 		}
 	}
 
@@ -228,7 +229,8 @@ func (m *Model) handleSearchResult(msg searchResultMsg) (tea.Model, tea.Cmd) {
 	m.answer.SetSources(sources)
 	m.state = stateStreaming
 
-	return m, m.streamAnswer(msg.query, contextParts)
+	cmd := m.streamAnswer(msg.query, contextParts)
+	return m, cmd
 }
 
 func (m *Model) streamAnswer(query string, context []string) tea.Cmd {
