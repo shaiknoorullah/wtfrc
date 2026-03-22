@@ -72,7 +72,12 @@ func (r *FIFOReader) Run(ctx context.Context, events chan<- Event) error {
 			}
 		}
 		// Scanner stopped (EOF or error) — signal the main loop.
-		scanCh <- scanResult{ok: false}
+		// Guard with ctx.Done to prevent goroutine leak if context is
+		// already cancelled and nobody is reading scanCh.
+		select {
+		case scanCh <- scanResult{ok: false}:
+		case <-ctx.Done():
+		}
 	}()
 
 	for {

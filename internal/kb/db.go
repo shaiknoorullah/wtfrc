@@ -254,9 +254,15 @@ func (db *DB) GetEntry(id int64) (*KBEntry, error) {
 
 	e.Type = parsers.EntryType(typ)
 	if seeAlsoJSON != "" {
-		json.Unmarshal([]byte(seeAlsoJSON), &e.SeeAlso)
+		if err := json.Unmarshal([]byte(seeAlsoJSON), &e.SeeAlso); err != nil {
+			return nil, fmt.Errorf("parse see_also JSON: %w", err)
+		}
 	}
-	e.IndexedAt, _ = time.Parse(time.RFC3339, indexedAtStr)
+	var parseErr error
+	e.IndexedAt, parseErr = time.Parse(time.RFC3339, indexedAtStr)
+	if parseErr != nil {
+		return nil, fmt.Errorf("parse indexed_at: %w", parseErr)
+	}
 
 	rows, err := db.conn.Query("SELECT phrase FROM intents WHERE entry_id = ?", id)
 	if err != nil {
@@ -341,9 +347,16 @@ func (db *DB) scanEntries(rows *sql.Rows) ([]KBEntry, error) {
 
 		e.Type = parsers.EntryType(typ)
 		if seeAlsoJSON != "" {
-			json.Unmarshal([]byte(seeAlsoJSON), &e.SeeAlso)
+			if err := json.Unmarshal([]byte(seeAlsoJSON), &e.SeeAlso); err != nil {
+				return nil, fmt.Errorf("parse see_also JSON: %w", err)
+			}
 		}
-		e.IndexedAt, _ = time.Parse(time.RFC3339, indexedAtStr)
+		if indexedAtStr != "" {
+			e.IndexedAt, err = time.Parse(time.RFC3339, indexedAtStr)
+			if err != nil {
+				return nil, fmt.Errorf("parse indexed_at: %w", err)
+			}
+		}
 
 		intentRows, err := db.conn.Query("SELECT phrase FROM intents WHERE entry_id = ?", e.ID)
 		if err != nil {
