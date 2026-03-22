@@ -31,6 +31,7 @@ type Event struct {
 // The context field is optional (2 or 3 fields accepted).
 // If action starts with "kb:", IsKeybind is set to true and the prefix is stripped.
 func ParseEvent(line string) (Event, error) {
+	line = strings.TrimRight(line, "\n\r")
 	if line == "" {
 		return Event{}, fmt.Errorf("empty input")
 	}

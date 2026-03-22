@@ -62,6 +62,24 @@ func TestParseEvent(t *testing.T) {
 			input:   "shell\t",
 			wantErr: true,
 		},
+		{
+			name:        "trailing newline stripped",
+			input:       "shell\tls\t/home\n",
+			wantSource:  "shell",
+			wantAction:  "ls",
+			wantContext: "/home",
+			wantKeybind: false,
+			wantErr:     false,
+		},
+		{
+			name:        "trailing CRLF stripped",
+			input:       "shell\tls\t/home\r\n",
+			wantSource:  "shell",
+			wantAction:  "ls",
+			wantContext: "/home",
+			wantKeybind: false,
+			wantErr:     false,
+		},
 	}
 
 	for _, tt := range tests {
