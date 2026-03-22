@@ -77,7 +77,7 @@ func TestOpenAICompatProvider_Complete_JSONFormat(t *testing.T) {
 	var gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, r.ContentLength)
-		r.Body.Read(body)
+		_, _ = r.Body.Read(body)
 		gotBody = string(body)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{
@@ -108,7 +108,7 @@ func TestOpenAICompatProvider_Complete_SystemMessage(t *testing.T) {
 	var gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, r.ContentLength)
-		r.Body.Read(body)
+		_, _ = r.Body.Read(body)
 		gotBody = string(body)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{

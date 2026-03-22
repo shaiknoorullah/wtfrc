@@ -21,12 +21,6 @@ func (m *mockDeliverer) Deliver(_ context.Context, message string) error {
 }
 
 func (m *mockDeliverer) called() bool { return len(m.messages) > 0 }
-func (m *mockDeliverer) last() string {
-	if len(m.messages) == 0 {
-		return ""
-	}
-	return m.messages[len(m.messages)-1]
-}
 
 // ----------------------------------------------------------------------------
 // TestDispatcherRouting

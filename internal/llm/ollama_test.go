@@ -218,7 +218,7 @@ func TestOllamaHealthCheck(t *testing.T) {
 func TestOllamaHealthCheckFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		io.WriteString(w, "service down")
+		_, _ = io.WriteString(w, "service down")
 	}))
 	defer srv.Close()
 
@@ -232,7 +232,7 @@ func TestOllamaHealthCheckFailure(t *testing.T) {
 func TestOllamaCompleteServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		io.WriteString(w, "internal error")
+		_, _ = io.WriteString(w, "internal error")
 	}))
 	defer srv.Close()
 

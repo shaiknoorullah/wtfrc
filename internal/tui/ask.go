@@ -75,11 +75,11 @@ func NewModel(db *kb.DB, provider llm.Provider, sessMgr *session.Manager, cfg *c
 	}
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return tea.Batch(m.input.Init(), m.spinner.Tick)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -120,7 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	var b strings.Builder
 
 	b.WriteString(HeaderStyle.Render("wtfrc — ask your config"))
@@ -154,7 +154,7 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc":
 		return m, tea.Quit
@@ -191,7 +191,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) searchKB(query string) tea.Cmd {
+func (m *Model) searchKB(query string) tea.Cmd {
 	return func() tea.Msg {
 		maxEntries := 10
 		if m.cfg != nil {
@@ -202,7 +202,7 @@ func (m Model) searchKB(query string) tea.Cmd {
 	}
 }
 
-func (m Model) handleSearchResult(msg searchResultMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleSearchResult(msg searchResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.err = msg.err
 		m.state = stateAnswer
@@ -212,7 +212,8 @@ func (m Model) handleSearchResult(msg searchResultMsg) (tea.Model, tea.Cmd) {
 	// Build context from search results
 	var contextParts []string
 	var sources []string
-	for _, r := range msg.results {
+	for i := range msg.results {
+		r := &msg.results[i]
 		part := fmt.Sprintf("[%s] %s", r.Tool, r.Description)
 		if r.RawBinding != nil {
 			part += fmt.Sprintf(" (binding: %s)", *r.RawBinding)
@@ -230,7 +231,7 @@ func (m Model) handleSearchResult(msg searchResultMsg) (tea.Model, tea.Cmd) {
 	return m, m.streamAnswer(msg.query, contextParts)
 }
 
-func (m Model) streamAnswer(query string, context []string) tea.Cmd {
+func (m *Model) streamAnswer(query string, context []string) tea.Cmd {
 	return func() tea.Msg {
 		systemPrompt := `You are wtfrc, a local config assistant. Answer questions about the user's dotfiles and configs based on the KB entries provided. Be concise and accurate. If the KB doesn't contain relevant info, say so.`
 
@@ -257,7 +258,7 @@ func context2() context.Context {
 	return context.Background()
 }
 
-func (m Model) handleStreamToken(msg streamTokenMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleStreamToken(msg streamTokenMsg) (tea.Model, tea.Cmd) {
 	if msg.done {
 		m.state = stateAnswer
 		m.input.Focus()

@@ -115,7 +115,7 @@ func (a *Archiver) Archive(archiveDir string, retainDays int) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	for _, sr := range toArchive {
 		// Fetch queries for this session.
@@ -142,10 +142,10 @@ func (a *Archiver) Archive(archiveDir string, retainDays int) error {
 				return fmt.Errorf("scan query: %w", err)
 			}
 			if entriesJSON != nil && *entriesJSON != "" {
-				json.Unmarshal([]byte(*entriesJSON), &aq.EntriesUsed)
+				_ = json.Unmarshal([]byte(*entriesJSON), &aq.EntriesUsed)
 			}
 			if issuesJSON != nil && *issuesJSON != "" {
-				json.Unmarshal([]byte(*issuesJSON), &aq.Issues)
+				_ = json.Unmarshal([]byte(*issuesJSON), &aq.Issues)
 			}
 			aqs = append(aqs, aq)
 		}

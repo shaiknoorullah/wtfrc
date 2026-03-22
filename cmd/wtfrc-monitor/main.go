@@ -23,6 +23,10 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	fifo := flag.String("fifo", "", "path to the FIFO (defaults to $WTFRC_FIFO)")
 	emitShiftChars := flag.Bool("emit-shift-chars", false,
 		"emit Shift+<key> combos (disabled by default for privacy)")
@@ -35,7 +39,7 @@ func main() {
 	}
 	if fifoPath == "" {
 		fmt.Fprintln(os.Stderr, "wtfrc-monitor: FIFO path is required (--fifo or $WTFRC_FIFO)")
-		os.Exit(1)
+		return 1
 	}
 
 	// Context cancelled on SIGINT or SIGTERM.
@@ -45,6 +49,7 @@ func main() {
 	m := monitor.NewMonitor(fifoPath, *emitShiftChars)
 	if err := m.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "wtfrc-monitor: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

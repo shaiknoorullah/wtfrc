@@ -22,12 +22,7 @@ import (
 // Flag variables for coach start
 // ---------------------------------------------------------------------------
 
-var (
-	coachStartMode   string
-	coachStartFocus  string
-	coachStartLayer4 bool
-	coachStartStrict bool
-)
+// Flag variables removed: local variables in buildCoachStartCmd are used instead.
 
 // ---------------------------------------------------------------------------
 // Command tree
@@ -85,12 +80,6 @@ via a systemd user service.`,
 	cmd.Flags().StringVar(&focus, "focus", "", "focus coaching on one category (overrides config)")
 	cmd.Flags().BoolVar(&layer4, "layer4", false, "enable Layer 4 OS-level monitor")
 	cmd.Flags().BoolVar(&strict, "strict", false, "enable strict mode")
-
-	// Mirror to package-level vars for the global command instance.
-	_ = mode
-	_ = focus
-	_ = layer4
-	_ = strict
 
 	return cmd
 }

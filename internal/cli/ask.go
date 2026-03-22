@@ -43,7 +43,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("start session: %w", err)
 	}
-	defer sessMgr.EndSession(sess.ID)
+	defer func() { _ = sessMgr.EndSession(sess.ID) }()
 
 	if len(args) > 0 {
 		query := strings.Join(args, " ")
@@ -52,7 +52,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 
 	// Interactive REPL mode
 	model := tui.NewModel(d.DB, d.FastLLM, sessMgr, d.Cfg, sess.ID)
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(&model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("tui: %w", err)
 	}
@@ -71,7 +71,8 @@ func askOneShot(d *deps, sessMgr *session.Manager, sessionID, query string) erro
 	}
 
 	var contextParts []string
-	for _, r := range results {
+	for i := range results {
+		r := &results[i]
 		part := fmt.Sprintf("[%s] %s", r.Tool, r.Description)
 		if r.RawBinding != nil {
 			part += fmt.Sprintf(" (binding: %s)", *r.RawBinding)
@@ -110,8 +111,8 @@ func askOneShot(d *deps, sessMgr *session.Manager, sessionID, query string) erro
 
 	if len(results) > 0 {
 		var sources []string
-		for _, r := range results {
-			sources = append(sources, fmt.Sprintf("  %s:%d", r.SourceFile, r.SourceLine))
+		for i := range results {
+			sources = append(sources, fmt.Sprintf("  %s:%d", results[i].SourceFile, results[i].SourceLine))
 		}
 		fmt.Fprintln(os.Stdout, sourceStyle.Render("Sources:"))
 		for _, s := range sources {

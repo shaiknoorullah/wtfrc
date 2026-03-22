@@ -133,9 +133,7 @@ func replaceStrongModel(cfg, model string) string {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "[llm.strong]" {
 			inStrong = true
-			result = append(result, line)
-			result = append(result, fmt.Sprintf("provider = \"ollama\""))
-			result = append(result, fmt.Sprintf("model = %q", model))
+			result = append(result, line, `provider = "ollama"`, fmt.Sprintf("model = %q", model))
 			replaced = true
 			continue
 		}

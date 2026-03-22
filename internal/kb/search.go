@@ -85,7 +85,7 @@ func (db *DB) Search(query string, limit int) ([]SearchResult, error) {
 
 		r.Type = parsers.EntryType(typ)
 		if seeAlsoJSON != "" {
-			json.Unmarshal([]byte(seeAlsoJSON), &r.SeeAlso)
+			_ = json.Unmarshal([]byte(seeAlsoJSON), &r.SeeAlso)
 		}
 		r.IndexedAt, _ = time.Parse(time.RFC3339, indexedAtStr)
 

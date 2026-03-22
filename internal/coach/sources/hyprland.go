@@ -134,9 +134,3 @@ func RunHyprlandOptional(ctx context.Context, events chan<- coach.Event) {
 	}
 }
 
-func min(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}

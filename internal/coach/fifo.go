@@ -87,10 +87,8 @@ func (r *FIFOReader) Run(ctx context.Context, events chan<- Event) error {
 		case res := <-scanCh:
 			if !res.ok {
 				// EOF or scanner error; wait for context.
-				select {
-				case <-ctx.Done():
-					return nil
-				}
+				<-ctx.Done()
+				return nil
 			}
 			// 5. Parse line; skip malformed input.
 			e, err := ParseEvent(res.text)

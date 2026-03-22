@@ -55,7 +55,7 @@ func (m *Manager) LogQuery(sessionID string, q kb.Query) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.Exec(
 		`INSERT INTO queries (session_id, question, answer, entries_used, response_time_ms, timestamp, accuracy_score, issues)

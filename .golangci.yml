@@ -14,6 +14,11 @@ linters-settings:
     enabled-tags:
       - diagnostic
       - performance
+    disabled-checks:
+      - hugeParam
+      - rangeValCopy
+      - ifElseChain
+      - filepathJoin
 
 issues:
   exclude-dirs:
