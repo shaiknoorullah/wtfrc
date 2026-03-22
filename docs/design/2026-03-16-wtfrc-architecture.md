@@ -581,8 +581,14 @@ The following event sources MUST be supported in a conforming v0.2 implementatio
 |--------|-----------|---------------|
 | Shell | zsh `preexec` hook | Every command typed; checked against existing aliases and functions |
 | i3/sway | IPC socket subscription | Window management actions (move, resize, close) |
-| Hyprland | hyprctl socket | Window management actions (same scope as i3 IPC) |
-| tmux | tmux hooks | Pane, window, and session operations |
+| Hyprland | hyprctl socket (socket2) | Window management actions, keybind dispatch, window focus/move/resize |
+| tmux | tmux `after-*` hooks | Pane, window, and session operations |
+| Neovim | RPC or autocmd-based telemetry | Keybind usage, anti-patterns (arrow keys in normal mode, mouse scrolling, suboptimal exits) |
+| kitty | kitty remote control protocol | Keybinding usage, tab/window operations |
+| qutebrowser | IPC socket or userscript hooks | Navigation patterns, suboptimal mouse usage when vim-binds exist |
+| yazi | Custom event hooks | File navigation patterns, suboptimal navigation when keybinds exist |
+| Zed | Extension or keylog telemetry | Editor keybind usage, anti-patterns |
+| keyd | evdev or keyd log monitoring | System-level key remap usage patterns |
 
 ### 10.2. Coach Mode (v0.2)
 
@@ -594,7 +600,7 @@ The Coach MUST support three operational modes:
 - **Moderate:** A humorous roast calling out the inefficiency, with the source reference.
 - **Strict:** A blocking message that refuses to execute the command until the user types the alias. (Strict mode is OPTIONAL for conforming implementations.)
 
-**Delivery channels:** The Coach MUST support at least one of the following delivery mechanisms: inline shell message (default, via `precmd` hook), desktop notification (dunst/mako), or tmux status line message.
+**Delivery channels:** The Coach MUST support at least one of the following delivery mechanisms: inline shell message (default, via `precmd` hook), desktop notification (dunst/mako/swaync), tmux status line message, or waybar custom module. The default delivery channel is context-aware: shell events use inline messages, window manager events use desktop notifications (dunst), and tmux events use tmux status line messages.
 
 **Anti-annoyance safeguards:** The Coach MUST implement the following:
 
@@ -610,18 +616,34 @@ The Coach MUST support three operational modes:
 | Scenario | Detection Method | Expected Response |
 |----------|-----------------|-------------------|
 | User types full command when alias exists | Shell preexec hook | Recommend the alias |
+| User types long pipeline when a function exists | Shell preexec hook | Recommend the function |
 | User resizes window via mouse when keybind exists | i3/sway/Hyprland IPC | Recommend the keybind |
-| User uses arrow keys in tmux copy mode when vim keys are enabled | tmux hook | Recommend vim navigation |
 | User opens app via mouse/launcher when keybind exists | i3/sway/Hyprland IPC | Recommend the keybind |
-| User exits nvim with Ctrl+C | nvim autocmd | Recommend `:wq` |
+| User focuses window via click when keybind exists | Hyprland IPC (activewindowv2) | Recommend the keybind |
+| User uses arrow keys in tmux copy mode when vim keys are enabled | tmux hook | Recommend vim navigation |
+| User navigates tmux panes with mouse when prefix+hjkl exists | tmux hook | Recommend the keybind |
+| User exits nvim with Ctrl+C or `:q!` when `:wq` or `ZZ` exists | nvim autocmd/RPC | Recommend optimal exit |
+| User uses arrow keys in nvim normal mode | nvim autocmd/RPC | Recommend hjkl or motions |
+| User scrolls with mouse in nvim when Ctrl+d/u exists | nvim autocmd/RPC | Recommend scroll keybinds |
+| User navigates qutebrowser with mouse when vim-binds exist | qutebrowser IPC/userscript | Recommend vim navigation |
+| User clicks qutebrowser tabs when `gt`/`gT` exists | qutebrowser IPC/userscript | Recommend tab keybinds |
+| User navigates yazi with arrow keys when hjkl exists | yazi event hooks | Recommend vim navigation |
+| User opens files in yazi via Enter-chain when jump exists | yazi event hooks | Recommend jump/search |
+| User types keybind that keyd could remap more efficiently | keyd log/evdev | Suggest layer optimization |
+| User uses kitty mouse for tab/window ops when keybinds exist | kitty remote control | Recommend the keybind |
 
 **Interception mechanisms:**
 
 - **Shell (zsh/bash):** A `preexec` hook fires before every command. It checks the raw command against indexed aliases and functions. Non-matching commands MUST incur zero observable performance impact (hash lookup).
 - **i3/sway:** IPC socket subscription detects mouse-driven actions (click-to-focus, drag-to-resize) where keybinds exist, and detects application launches via exec versus keybind.
-- **Hyprland:** `hyprctl dispatch` socket monitoring, using the same approach as i3 IPC.
-- **tmux:** `after-*` hooks (after-select-pane, after-copy-mode, etc.) detect suboptimal navigation patterns.
-- **nvim:** A lightweight RPC plugin or autocmd-based telemetry detects anti-patterns (arrow keys in normal mode, mouse scrolling when keybinds exist).
+- **Hyprland:** Socket2 event subscription (`activewindowv2`, `openwindow`, `movewindow`, `focusedmon`). Detects mouse-driven operations where keybinds exist. Uses `hyprctl dispatch` monitoring for action comparison.
+- **tmux:** `after-*` hooks (after-select-pane, after-copy-mode, after-select-window, etc.) detect suboptimal navigation patterns. Hooks call `wtfrc coach --check-tmux` with event context.
+- **Neovim:** A lightweight Lua autocmd plugin or RPC-based telemetry. Detects arrow keys in normal mode, mouse scrolling, suboptimal exits, and unused custom keybinds. Communicates with wtfrc via Unix socket or stdout pipe.
+- **kitty:** Uses kitty's remote control protocol (`kitty @ ls`, `kitty @ send-text`) to monitor tab/window operations. Detects mouse-based operations where keybinds exist.
+- **qutebrowser:** A userscript or IPC socket listener (`~/.local/share/qutebrowser/ipc-*`) monitors navigation events. Detects mouse-heavy usage patterns when vim-style binds are available.
+- **yazi:** Custom plugin or event hook integration. Monitors navigation patterns and detects suboptimal file browsing when shortcuts exist.
+- **Zed:** Extension-based telemetry or keylog analysis. Detects unused custom keybinds and suboptimal editing patterns.
+- **keyd:** Monitors keyd logs or evdev events to detect patterns where layer remaps could optimize multi-key sequences.
 
 **Prior art and differentiation:** The `zsh-you-should-use` plugin only checks zsh aliases, has no personality or roasting, and provides no multi-tool support. The wtfrc Coach tracks aliases, keybinds, shell functions, editor shortcuts, window manager actions, and tmux commands; has a configurable personality; supports multiple modes; and implements graduation logic.
 
@@ -1024,11 +1046,22 @@ The Tutor breaks this cycle by providing objective, data-driven feedback.
 
 #### v0.2 -- "Coach"
 
-- Usage tracker: zsh preexec hook
-- Usage tracker: i3/sway/hyprland IPC
+- Usage tracker: zsh preexec hook (aliases, functions, exports)
+- Usage tracker: i3/sway IPC socket subscription
+- Usage tracker: Hyprland socket2 event subscription
+- Usage tracker: tmux after-* hooks
+- Usage tracker: Neovim autocmd/RPC telemetry
+- Usage tracker: kitty remote control protocol
+- Usage tracker: qutebrowser IPC/userscript hooks
+- Usage tracker: yazi event hooks
+- Usage tracker: Zed extension/keylog telemetry
+- Usage tracker: keyd log/evdev monitoring
 - Coach mode: inline shell roasts
-- Coach mode: desktop notifications
+- Coach mode: desktop notifications (dunst/mako/swaync)
+- Coach mode: tmux status line messages
 - Coach mode: strict/moderate/chill modes
+- Coach mode: context-aware delivery channel selection
+- Anti-annoyance: per-action cooldown, daily budget, snooze, graduation logic
 - Supervisor: coach accuracy review
 - Rofi frontend option
 
