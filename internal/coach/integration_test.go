@@ -50,7 +50,7 @@ func insertTestAliases(t *testing.T, db *kb.DB) {
 		{"ll", "ls -la"},
 	} {
 		b, a := alias.binding, alias.action
-		if _, err := db.InsertEntry(kb.KBEntry{
+		if _, err := db.InsertEntry(&kb.KBEntry{
 			Tool:        "zsh",
 			Type:        parsers.EntryAlias,
 			RawBinding:  &b,

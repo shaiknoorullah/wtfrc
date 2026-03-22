@@ -297,7 +297,7 @@ func TestInstallRemove(t *testing.T) {
 	// Insert test entries.
 	binding := "$mod, j"
 	action := "movefocus, l"
-	_, err = db.InsertEntry(kb.KBEntry{
+	_, err = db.InsertEntry(&kb.KBEntry{
 		Tool:       "hyprland",
 		Type:       "keybind",
 		RawBinding: &binding,
@@ -311,7 +311,7 @@ func TestInstallRemove(t *testing.T) {
 
 	tmuxBinding := "bind-key -T prefix o"
 	tmuxAction := "select-pane -t :.+"
-	_, err = db.InsertEntry(kb.KBEntry{
+	_, err = db.InsertEntry(&kb.KBEntry{
 		Tool:       "tmux",
 		Type:       "keybind",
 		RawBinding: &tmuxBinding,
@@ -403,7 +403,7 @@ func TestRegenerate(t *testing.T) {
 
 	binding := "$mod, j"
 	action := "movefocus, l"
-	_, err = db.InsertEntry(kb.KBEntry{
+	_, err = db.InsertEntry(&kb.KBEntry{
 		Tool:       "hyprland",
 		Type:       "keybind",
 		RawBinding: &binding,

@@ -69,8 +69,8 @@ func openRoasterTestDB(t *testing.T) *sql.DB {
 }
 
 // testSuggestion returns a Suggestion with deterministic fields for use in tests.
-func testSuggestion() Suggestion {
-	return Suggestion{
+func testSuggestion() *Suggestion {
+	return &Suggestion{
 		ActionID:   "zsh:gs",
 		Tool:       "zsh",
 		UserAction: "git status",
@@ -109,7 +109,7 @@ func (m *mockLLM) HealthCheck(_ context.Context) error { return nil }
 // ---------------------------------------------------------------------------
 
 func TestInterpolate(t *testing.T) {
-	s := Suggestion{
+	s := &Suggestion{
 		UserAction: "git status",
 		Optimal:    "gs",
 		SourceFile: "~/.zshrc",
@@ -411,57 +411,57 @@ func TestGenerateLiveOffline(t *testing.T) {
 func TestCategoryFromSuggestion(t *testing.T) {
 	tests := []struct {
 		name     string
-		s        Suggestion
+		s        *Suggestion
 		wantCat  string
 	}{
 		{
 			name:    "zsh alias",
-			s:       Suggestion{Tool: "zsh", ActionID: "zsh:gs"},
+			s:       &Suggestion{Tool: "zsh", ActionID: "zsh:gs"},
 			wantCat: "shell_alias",
 		},
 		{
 			name:    "bash alias",
-			s:       Suggestion{Tool: "bash", ActionID: "bash:ll"},
+			s:       &Suggestion{Tool: "bash", ActionID: "bash:ll"},
 			wantCat: "shell_alias",
 		},
 		{
 			name:    "zsh function",
-			s:       Suggestion{Tool: "zsh", ActionID: "zsh:myfunc"},
+			s:       &Suggestion{Tool: "zsh", ActionID: "zsh:myfunc"},
 			wantCat: "shell_alias",
 		},
 		{
 			name:    "hyprland keybind",
-			s:       Suggestion{Tool: "hyprland", ActionID: "hyprland:movefocus_l"},
+			s:       &Suggestion{Tool: "hyprland", ActionID: "hyprland:movefocus_l"},
 			wantCat: "wm_keybind",
 		},
 		{
 			name:    "tmux keybind",
-			s:       Suggestion{Tool: "tmux", ActionID: "tmux:split"},
+			s:       &Suggestion{Tool: "tmux", ActionID: "tmux:split"},
 			wantCat: "wm_keybind",
 		},
 		{
 			name:    "kitty keybind",
-			s:       Suggestion{Tool: "kitty"},
+			s:       &Suggestion{Tool: "kitty"},
 			wantCat: "wm_keybind",
 		},
 		{
 			name:    "qutebrowser keybind",
-			s:       Suggestion{Tool: "qutebrowser"},
+			s:       &Suggestion{Tool: "qutebrowser"},
 			wantCat: "wm_keybind",
 		},
 		{
 			name:    "yazi keybind",
-			s:       Suggestion{Tool: "yazi"},
+			s:       &Suggestion{Tool: "yazi"},
 			wantCat: "wm_keybind",
 		},
 		{
 			name:    "nvim editor motion",
-			s:       Suggestion{Tool: "nvim"},
+			s:       &Suggestion{Tool: "nvim"},
 			wantCat: "editor_motion",
 		},
 		{
 			name:    "unknown tool",
-			s:       Suggestion{Tool: "something_else"},
+			s:       &Suggestion{Tool: "something_else"},
 			wantCat: "default",
 		},
 	}

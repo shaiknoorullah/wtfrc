@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS coaching_messages (
 CREATE INDEX IF NOT EXISTS idx_coaching_messages_cat_mode ON coaching_messages(category, mode);
 `
 
-func (db *DB) InsertEntry(e KBEntry, intents []string) (int64, error) {
+func (db *DB) InsertEntry(e *KBEntry, intents []string) (int64, error) {
 	seeAlsoJSON, err := json.Marshal(e.SeeAlso)
 	if err != nil {
 		return 0, fmt.Errorf("marshal see_also: %w", err)

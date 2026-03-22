@@ -44,7 +44,7 @@ func TestSessionLifecycle(t *testing.T) {
 			Timestamp:      time.Now().UTC(),
 			Issues:         []string{},
 		}
-		if err := mgr.LogQuery(sess.ID, q); err != nil {
+		if err := mgr.LogQuery(sess.ID, &q); err != nil {
 			t.Fatalf("LogQuery %d: %v", i, err)
 		}
 	}
@@ -98,7 +98,7 @@ func TestRecentQueries(t *testing.T) {
 			Timestamp:      base.Add(time.Duration(i) * time.Minute),
 			Issues:         []string{},
 		}
-		if err := mgr.LogQuery(sess.ID, q); err != nil {
+		if err := mgr.LogQuery(sess.ID, &q); err != nil {
 			t.Fatalf("LogQuery %d: %v", i, err)
 		}
 	}

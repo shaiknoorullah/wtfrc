@@ -72,7 +72,7 @@ func insertTestEntry(t *testing.T, db *kb.DB, binding, action, desc string) int6
 		IndexedAt:   time.Now().UTC(),
 		FileHash:    "abc123",
 	}
-	id, err := db.InsertEntry(e, []string{"test intent"})
+	id, err := db.InsertEntry(&e, []string{"test intent"})
 	if err != nil {
 		t.Fatalf("insert entry: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestReviewDetectsPhantomEntryID(t *testing.T) {
 	}
 
 	// Query 1: cites real entries — should be clean.
-	err = mgr.LogQuery(sess.ID, kb.Query{
+	err = mgr.LogQuery(sess.ID, &kb.Query{
 		Question:       "How do I open a terminal?",
 		Answer:         "Press `$mod+Return` to launch alacritty.",
 		EntriesUsed:    []int64{realID1},
@@ -111,7 +111,7 @@ func TestReviewDetectsPhantomEntryID(t *testing.T) {
 	}
 
 	// Query 2: cites a real ID + a nonexistent ID 9999.
-	err = mgr.LogQuery(sess.ID, kb.Query{
+	err = mgr.LogQuery(sess.ID, &kb.Query{
 		Question:       "How do I launch rofi?",
 		Answer:         "Use `$mod+d` to open the app launcher.",
 		EntriesUsed:    []int64{realID2, 9999},
@@ -178,7 +178,7 @@ func TestReviewDeterministicRefMismatch(t *testing.T) {
 	}
 
 	// The answer claims $mod+Shift+q but the cited entry only has $mod+Return.
-	err = mgr.LogQuery(sess.ID, kb.Query{
+	err = mgr.LogQuery(sess.ID, &kb.Query{
 		Question:       "How do I close a window?",
 		Answer:         "Press `$mod+Shift+q` to close the focused window.",
 		EntriesUsed:    []int64{realID},
@@ -221,7 +221,7 @@ func TestReviewTier2LLMCrossCheck(t *testing.T) {
 	}
 
 	// Query with no entries_used but answer cites a specific keybind — triggers Tier 2.
-	err = mgr.LogQuery(sess.ID, kb.Query{
+	err = mgr.LogQuery(sess.ID, &kb.Query{
 		Question:       "How do I switch workspaces?",
 		Answer:         "Press `$mod+1` through `$mod+9` to switch workspaces.",
 		EntriesUsed:    []int64{},
@@ -289,7 +289,7 @@ func TestReviewNoIssues(t *testing.T) {
 		t.Fatalf("start session: %v", err)
 	}
 
-	err = mgr.LogQuery(sess.ID, kb.Query{
+	err = mgr.LogQuery(sess.ID, &kb.Query{
 		Question:       "How do I open a terminal?",
 		Answer:         "Press `$mod+Return` to launch alacritty.",
 		EntriesUsed:    []int64{realID},
@@ -390,7 +390,7 @@ func TestVerifyAnswerDeterministicClean(t *testing.T) {
 	}
 
 	sup := New(db, nil, mgr)
-	issues := sup.verifyAnswerDeterministic(q, []kb.KBEntry{*entry})
+	issues := sup.verifyAnswerDeterministic(&q, []kb.KBEntry{*entry})
 	if len(issues) != 0 {
 		t.Errorf("expected no issues, got: %v", issues)
 	}

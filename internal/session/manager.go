@@ -40,7 +40,7 @@ func (m *Manager) StartSession(modelUsed string) (*kb.Session, error) {
 }
 
 // LogQuery inserts a query row and increments the session's query_count.
-func (m *Manager) LogQuery(sessionID string, q kb.Query) error {
+func (m *Manager) LogQuery(sessionID string, q *kb.Query) error {
 	entriesJSON, err := json.Marshal(q.EntriesUsed)
 	if err != nil {
 		return fmt.Errorf("marshal entries_used: %w", err)

@@ -50,7 +50,7 @@ func TestManifestComputeHashAndIsChanged(t *testing.T) {
 
 	// Save to manifest.
 	now := time.Now()
-	err = m.Update(kb.ManifestEntry{
+	err = m.Update(&kb.ManifestEntry{
 		FilePath:    tmpFile,
 		SHA256:      hash,
 		Mtime:       now,
@@ -95,8 +95,8 @@ func TestManifestListTracked(t *testing.T) {
 		{FilePath: "/tmp/a", SHA256: "aaa", Mtime: now, LastIndexed: now, EntryCount: 2},
 		{FilePath: "/tmp/b", SHA256: "bbb", Mtime: now, LastIndexed: now, EntryCount: 5},
 	}
-	for _, e := range entries {
-		if err := m.Update(e); err != nil {
+	for i := range entries {
+		if err := m.Update(&entries[i]); err != nil {
 			t.Fatalf("Update: %v", err)
 		}
 	}
@@ -132,7 +132,7 @@ func TestManifestRemove(t *testing.T) {
 	m := NewManifest(db)
 
 	now := time.Now()
-	err := m.Update(kb.ManifestEntry{
+	err := m.Update(&kb.ManifestEntry{
 		FilePath:    "/tmp/remove-me",
 		SHA256:      "xyz",
 		Mtime:       now,

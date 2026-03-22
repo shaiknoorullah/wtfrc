@@ -115,7 +115,7 @@ func findFirstEventDevice() (string, error) {
 	}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), "event") {
-			path := filepath.Join("/dev/input", e.Name())
+			path := "/dev/input/" + e.Name()
 			f, err := os.Open(path)
 			if err == nil {
 				f.Close()

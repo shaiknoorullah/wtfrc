@@ -50,7 +50,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	for i, r := range results {
+	for i := range results {
+		r := &results[i]
 		binding := ""
 		if r.RawBinding != nil {
 			binding = *r.RawBinding

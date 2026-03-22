@@ -76,8 +76,8 @@ func TestGetEntriesByTypes(t *testing.T) {
 		{KBEntry{Tool: "i3", Type: parsers.EntryKeybind, RawBinding: &binding, RawAction: &action, Description: "keybind one", SourceFile: "/c", SourceLine: 3, Category: "wm", FileHash: "h3", IndexedAt: now}, []string{"keybind one"}},
 	}
 
-	for _, e := range entries {
-		if _, err := db.InsertEntry(e.entry, e.intents); err != nil {
+	for i := range entries {
+		if _, err := db.InsertEntry(&entries[i].entry, entries[i].intents); err != nil {
 			t.Fatalf("InsertEntry failed: %v", err)
 		}
 	}
@@ -120,8 +120,8 @@ func TestGetEntriesByToolAndType(t *testing.T) {
 		{KBEntry{Tool: "i3", Type: parsers.EntryKeybind, RawBinding: &binding, RawAction: &action, Description: "i3 keybind", SourceFile: "/i3", SourceLine: 3, Category: "wm", FileHash: "ih1", IndexedAt: now}, []string{"i3 move"}},
 	}
 
-	for _, e := range entries {
-		if _, err := db.InsertEntry(e.entry, e.intents); err != nil {
+	for i := range entries {
+		if _, err := db.InsertEntry(&entries[i].entry, entries[i].intents); err != nil {
 			t.Fatalf("InsertEntry failed: %v", err)
 		}
 	}
@@ -174,7 +174,7 @@ func TestInsertAndGetEntry(t *testing.T) {
 
 	intents := []string{"close window", "kill window", "how to close"}
 
-	id, err := db.InsertEntry(entry, intents)
+	id, err := db.InsertEntry(&entry, intents)
 	if err != nil {
 		t.Fatalf("InsertEntry failed: %v", err)
 	}

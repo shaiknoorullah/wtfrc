@@ -76,7 +76,7 @@ func NewRoaster(db *sql.DB, llmProvider llm.Provider, cfg *config.CoachConfig) *
 //
 // Tier 2 (cached pool) is attempted first. If no cached messages exist for the
 // category+mode combination the method falls back to Tier 1 (static templates).
-func (r *Roaster) Generate(suggestion Suggestion, mode string) string {
+func (r *Roaster) Generate(suggestion *Suggestion, mode string) string {
 	category := categoryFromSuggestion(suggestion)
 
 	// --- Tier 2: cached LLM-generated pool ---
@@ -93,7 +93,7 @@ func (r *Roaster) Generate(suggestion Suggestion, mode string) string {
 // tryTier2 looks up the least-used cached message for category+mode, interpolates
 // variables, increments its used_count, and returns the result.
 // Returns "" when no cached messages are available.
-func (r *Roaster) tryTier2(category, mode string, s Suggestion) string {
+func (r *Roaster) tryTier2(category, mode string, s *Suggestion) string {
 	var id int64
 	var tmpl string
 
@@ -117,7 +117,7 @@ func (r *Roaster) tryTier2(category, mode string, s Suggestion) string {
 }
 
 // tier1 returns a Tier 1 static template message.
-func (r *Roaster) tier1(category, mode string, s Suggestion) string {
+func (r *Roaster) tier1(category, mode string, s *Suggestion) string {
 	modeTemplates, ok := templates[mode]
 	if !ok {
 		// Unknown mode — fall back to "chill".
@@ -214,7 +214,7 @@ func (r *Roaster) refreshCategoryMode(ctx context.Context, category, mode string
 
 // GenerateLive calls the LLM with full context to produce a bespoke coaching
 // message for complex situations. Returns an error if the LLM is unavailable.
-func (r *Roaster) GenerateLive(ctx context.Context, suggestion Suggestion, mode, extraContext string) (string, error) {
+func (r *Roaster) GenerateLive(ctx context.Context, suggestion *Suggestion, mode, extraContext string) (string, error) {
 	if r.llm == nil {
 		return "", fmt.Errorf("GenerateLive: LLM provider is not configured (offline mode)")
 	}
@@ -263,7 +263,7 @@ func (r *Roaster) GenerateLive(ctx context.Context, suggestion Suggestion, mode,
 // ---------------------------------------------------------------------------
 
 // interpolate replaces all known placeholders in tmpl with values from s.
-func interpolate(tmpl string, s Suggestion) string {
+func interpolate(tmpl string, s *Suggestion) string {
 	r := strings.NewReplacer(
 		"{optimal}", s.Optimal,
 		"{typed}", s.UserAction,
@@ -277,7 +277,7 @@ func interpolate(tmpl string, s Suggestion) string {
 
 // categoryFromSuggestion derives the coaching category from a Suggestion's Tool
 // and ActionID fields.
-func categoryFromSuggestion(s Suggestion) string {
+func categoryFromSuggestion(s *Suggestion) string {
 	switch s.Tool {
 	case "zsh", "bash":
 		return "shell_alias"

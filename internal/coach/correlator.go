@@ -7,7 +7,7 @@ import (
 
 // timestampedEvent pairs an Event with the wall-clock time it was received.
 type timestampedEvent struct {
-	event Event
+	event *Event
 	at    time.Time
 }
 
@@ -52,7 +52,7 @@ func NewCorrelator(window time.Duration, now func() time.Time) *Correlator {
 //
 // Expired keybind entries (older than window) are purged from all buffers on
 // every call.
-func (c *Correlator) Process(ev Event) *Event {
+func (c *Correlator) Process(ev *Event) *Event {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -79,7 +79,7 @@ func (c *Correlator) Process(ev Event) *Event {
 	}
 
 	// No matching keybind found → coaching opportunity.
-	return &ev
+	return ev
 }
 
 // expire removes all timestampedEvent entries from every buffer whose timestamp

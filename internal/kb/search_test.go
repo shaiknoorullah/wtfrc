@@ -18,7 +18,7 @@ func seedTestDB(t *testing.T) *DB {
 
 	binding1 := "$mod+Shift+q"
 	action1 := "kill"
-	_, err = db.InsertEntry(KBEntry{
+	_, err = db.InsertEntry(&KBEntry{
 		Tool:        "i3",
 		Type:        parsers.EntryKeybind,
 		RawBinding:  &binding1,
@@ -36,7 +36,7 @@ func seedTestDB(t *testing.T) *DB {
 
 	binding2 := "prefix + ["
 	action2 := "copy-mode"
-	_, err = db.InsertEntry(KBEntry{
+	_, err = db.InsertEntry(&KBEntry{
 		Tool:        "tmux",
 		Type:        parsers.EntryKeybind,
 		RawBinding:  &binding2,

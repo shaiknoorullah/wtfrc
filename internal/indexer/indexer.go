@@ -127,13 +127,13 @@ func (idx *Indexer) indexFile(ctx context.Context, path string) error {
 			FileHash:    hash,
 		}
 
-		if _, err := idx.db.InsertEntry(kbEntry, e.Intents); err != nil {
+		if _, err := idx.db.InsertEntry(&kbEntry, e.Intents); err != nil {
 			return fmt.Errorf("insert entry: %w", err)
 		}
 	}
 
 	// Step 5: update manifest.
-	if err := idx.manifest.Update(kb.ManifestEntry{
+	if err := idx.manifest.Update(&kb.ManifestEntry{
 		FilePath:    path,
 		SHA256:      hash,
 		Mtime:       now,

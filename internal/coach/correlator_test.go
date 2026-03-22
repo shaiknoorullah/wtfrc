@@ -19,12 +19,12 @@ func (f *fakeClock) Now() time.Time { return f.now }
 func (f *fakeClock) Advance(d time.Duration) { f.now = f.now.Add(d) }
 
 // helpers to build events quickly.
-func keybindEvent(source string) Event {
-	return Event{Source: source, Action: "some-action", IsKeybind: true}
+func keybindEvent(source string) *Event {
+	return &Event{Source: source, Action: "some-action", IsKeybind: true}
 }
 
-func resultEvent(source string) Event {
-	return Event{Source: source, Action: "some-action", IsKeybind: false}
+func resultEvent(source string) *Event {
+	return &Event{Source: source, Action: "some-action", IsKeybind: false}
 }
 
 // TestCorrelatorKeybindThenResult: keybind at T=0, result at T=50ms → nil (consumed).

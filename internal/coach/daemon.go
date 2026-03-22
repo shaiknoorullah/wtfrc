@@ -122,13 +122,13 @@ func (d *Daemon) processEvents(ctx context.Context, events <-chan Event) error {
 			if !ok {
 				return nil
 			}
-			d.handleEvent(ctx, ev)
+			d.handleEvent(ctx, &ev)
 		}
 	}
 }
 
 // handleEvent executes the full coaching pipeline for a single event.
-func (d *Daemon) handleEvent(ctx context.Context, ev Event) {
+func (d *Daemon) handleEvent(ctx context.Context, ev *Event) {
 	cfg := d.cfgPtr.Load()
 
 	// 1. Record every event to usage_events.
@@ -154,7 +154,7 @@ func (d *Daemon) handleEvent(ctx context.Context, ev Event) {
 	}
 
 	// 5. Generate message.
-	msg := d.roaster.Generate(*suggestion, cfg.Coach.Mode)
+	msg := d.roaster.Generate(suggestion, cfg.Coach.Mode)
 
 	// 6. Dispatch.
 	if err := d.dispatcher.Send(ctx, msg, correlated.Source); err != nil {

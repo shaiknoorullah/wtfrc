@@ -57,7 +57,7 @@ func insertAliasEntry(t *testing.T, db *kb.DB) {
 	t.Helper()
 	binding := "gs"
 	action := "git status"
-	_, err := db.InsertEntry(kb.KBEntry{
+	_, err := db.InsertEntry(&kb.KBEntry{
 		Tool:        "zsh",
 		Type:        parsers.EntryAlias,
 		RawBinding:  &binding,
