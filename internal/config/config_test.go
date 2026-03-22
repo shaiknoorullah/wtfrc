@@ -26,6 +26,63 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestCoachDefaults(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load('') returned error: %v", err)
+	}
+
+	c := cfg.Coach
+	if !c.Enabled {
+		t.Errorf("expected coach.enabled true, got false")
+	}
+	if c.Mode != "chill" {
+		t.Errorf("expected coach.mode 'chill', got %q", c.Mode)
+	}
+	if c.BudgetPerHour != 5 {
+		t.Errorf("expected coach.budget_per_hour 5, got %d", c.BudgetPerHour)
+	}
+	if c.CooldownSeconds != 120 {
+		t.Errorf("expected coach.cooldown_seconds 120, got %d", c.CooldownSeconds)
+	}
+	if c.QuietHours != "22:00-08:00" {
+		t.Errorf("expected coach.quiet_hours '22:00-08:00', got %q", c.QuietHours)
+	}
+	if c.FocusCategory != "" {
+		t.Errorf("expected coach.focus_category '', got %q", c.FocusCategory)
+	}
+	if c.GraduationStreak != 7 {
+		t.Errorf("expected coach.graduation_streak 7, got %d", c.GraduationStreak)
+	}
+	if c.Layer4.Enabled {
+		t.Errorf("expected coach.layer4.enabled false, got true")
+	}
+	if c.Layer4.EmitShiftChars {
+		t.Errorf("expected coach.layer4.emit_shift_chars false, got true")
+	}
+	if c.Delivery.Shell != "inline" {
+		t.Errorf("expected coach.delivery.shell 'inline', got %q", c.Delivery.Shell)
+	}
+	if c.Delivery.Hyprland != "dunst" {
+		t.Errorf("expected coach.delivery.hyprland 'dunst', got %q", c.Delivery.Hyprland)
+	}
+	if c.Delivery.Tmux != "status" {
+		t.Errorf("expected coach.delivery.tmux 'status', got %q", c.Delivery.Tmux)
+	}
+	if c.Delivery.Neovim != "notify" {
+		t.Errorf("expected coach.delivery.neovim 'notify', got %q", c.Delivery.Neovim)
+	}
+	if c.Delivery.Default != "dunst" {
+		t.Errorf("expected coach.delivery.default 'dunst', got %q", c.Delivery.Default)
+	}
+	if c.Delivery.WaybarSignal != 8 {
+		t.Errorf("expected coach.delivery.waybar_signal 8, got %d", c.Delivery.WaybarSignal)
+	}
+	if c.Personality.CustomPrompt != "" {
+		t.Errorf("expected coach.personality.custom_prompt '', got %q", c.Personality.CustomPrompt)
+	}
+}
+
 func TestLoadFromFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.toml")

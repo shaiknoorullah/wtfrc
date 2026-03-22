@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shaiknoorullah/wtfrc/internal/indexer/parsers"
@@ -155,6 +156,53 @@ CREATE INDEX IF NOT EXISTS idx_intents_entry_id ON intents(entry_id);
 CREATE INDEX IF NOT EXISTS idx_queries_session_id ON queries(session_id);
 CREATE INDEX IF NOT EXISTS idx_usage_events_tool ON usage_events(tool);
 CREATE INDEX IF NOT EXISTS idx_usage_events_timestamp ON usage_events(timestamp);
+
+-- Coaching state per action (graduation tracking)
+CREATE TABLE IF NOT EXISTS coaching_state (
+    action_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL DEFAULT 'novice',
+    consecutive_optimal INTEGER NOT NULL DEFAULT 0,
+    total_coached INTEGER NOT NULL DEFAULT 0,
+    total_adopted INTEGER NOT NULL DEFAULT 0,
+    first_coached_at TEXT,
+    last_coached_at TEXT,
+    last_adopted_at TEXT,
+    next_coach_after TEXT,
+    graduated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_state_state ON coaching_state(state);
+
+-- Coaching event log
+CREATE TABLE IF NOT EXISTS coaching_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    source TEXT NOT NULL,
+    action_id TEXT NOT NULL,
+    user_action TEXT NOT NULL,
+    optimal_action TEXT NOT NULL,
+    message TEXT,
+    mode TEXT NOT NULL,
+    delivery TEXT NOT NULL,
+    was_adopted INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (action_id) REFERENCES coaching_state(action_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_log_timestamp ON coaching_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_coaching_log_action ON coaching_log(action_id);
+
+-- Cached LLM-generated coaching messages
+CREATE TABLE IF NOT EXISTS coaching_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    template TEXT NOT NULL,
+    variables TEXT NOT NULL,
+    generated_at TEXT NOT NULL,
+    used_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_messages_cat_mode ON coaching_messages(category, mode);
 `
 
 func (db *DB) InsertEntry(e KBEntry, intents []string) (int64, error) {
@@ -230,4 +278,88 @@ func (db *DB) GetEntry(id int64) (*KBEntry, error) {
 func (db *DB) DeleteEntriesByFile(filePath string) error {
 	_, err := db.conn.Exec("DELETE FROM entries WHERE source_file = ?", filePath)
 	return err
+}
+
+// GetEntriesByTypes returns all entries whose type is one of the provided types.
+func (db *DB) GetEntriesByTypes(types []string) ([]KBEntry, error) {
+	if len(types) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(types))
+	args := make([]interface{}, len(types))
+	for i, t := range types {
+		placeholders[i] = "?"
+		args[i] = t
+	}
+
+	query := fmt.Sprintf(
+		`SELECT id, tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash
+		 FROM entries WHERE type IN (%s)`,
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("GetEntriesByTypes: %w", err)
+	}
+	defer rows.Close()
+
+	return db.scanEntries(rows)
+}
+
+// GetEntriesByToolAndType returns all entries for a specific tool and entry type.
+func (db *DB) GetEntriesByToolAndType(tool string, entryType string) ([]KBEntry, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash
+		 FROM entries WHERE tool = ? AND type = ?`,
+		tool, entryType,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetEntriesByToolAndType: %w", err)
+	}
+	defer rows.Close()
+
+	return db.scanEntries(rows)
+}
+
+// scanEntries scans a result set of entries rows and fetches their intents.
+func (db *DB) scanEntries(rows *sql.Rows) ([]KBEntry, error) {
+	var entries []KBEntry
+	for rows.Next() {
+		var e KBEntry
+		var typ string
+		var seeAlsoJSON string
+		var indexedAtStr string
+
+		err := rows.Scan(&e.ID, &e.Tool, &typ, &e.RawBinding, &e.RawAction,
+			&e.Description, &e.SourceFile, &e.SourceLine, &e.Category,
+			&seeAlsoJSON, &indexedAtStr, &e.FileHash)
+		if err != nil {
+			return nil, fmt.Errorf("scan entry: %w", err)
+		}
+
+		e.Type = parsers.EntryType(typ)
+		if seeAlsoJSON != "" {
+			json.Unmarshal([]byte(seeAlsoJSON), &e.SeeAlso)
+		}
+		e.IndexedAt, _ = time.Parse(time.RFC3339, indexedAtStr)
+
+		intentRows, err := db.conn.Query("SELECT phrase FROM intents WHERE entry_id = ?", e.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get intents for entry %d: %w", e.ID, err)
+		}
+		for intentRows.Next() {
+			var phrase string
+			if err := intentRows.Scan(&phrase); err != nil {
+				intentRows.Close()
+				return nil, fmt.Errorf("scan intent: %w", err)
+			}
+			e.Intents = append(e.Intents, phrase)
+		}
+		intentRows.Close()
+
+		entries = append(entries, e)
+	}
+	return entries, nil
 }
