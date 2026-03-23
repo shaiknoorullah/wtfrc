@@ -23,6 +23,10 @@ import (
 // testHarness is the shared harness for all E2E tests.
 var testHarness *harness.Harness
 
+// guestRuntimeDir is the wtfrc runtime directory on the guest (e.g. /run/user/1000/wtfrc
+// or /tmp/wtfrc-1000). Detected during setup since $XDG_RUNTIME_DIR may not be set in SSH.
+var guestRuntimeDir string
+
 func TestMain(m *testing.M) {
 	var err error
 	testHarness, err = harness.New()
@@ -81,6 +85,25 @@ func setupCoachEnvironment(ctx context.Context) error {
 	countOut, _, _ := testHarness.RunOnGuest(ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM entries WHERE type='alias'"`)
 	log.Printf("Seeded KB: %s alias entries", strings.TrimSpace(countOut))
 
+	// Ensure XDG_RUNTIME_DIR is set on the guest. SSH sessions may not have it.
+	// The daemon and all tests need it to find the FIFO and other runtime files.
+	_, _, _ = testHarness.RunOnGuest(ctx,
+		`if [ -z "$XDG_RUNTIME_DIR" ]; then
+			export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+			sudo mkdir -p "$XDG_RUNTIME_DIR"
+			sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
+			echo "export XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> ~/.zshenv
+		fi`)
+
+	// Detect the runtime dir (now guaranteed to be set)
+	rtOut, _, _ := testHarness.RunOnGuest(ctx,
+		`echo "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wtfrc"`)
+	guestRuntimeDir = strings.TrimSpace(rtOut)
+	if guestRuntimeDir == "" {
+		guestRuntimeDir = "/run/user/1000/wtfrc"
+	}
+	log.Printf("Guest runtime dir: %s", guestRuntimeDir)
+
 	// Start the coach daemon in the background.
 	// Use nohup with full fd redirection so SSH returns immediately.
 	_, stderr, err := testHarness.RunOnGuest(ctx,
@@ -91,7 +114,7 @@ func setupCoachEnvironment(ctx context.Context) error {
 
 	// Wait for the FIFO to appear
 	err = testHarness.WaitForCondition(ctx,
-		"test -p $XDG_RUNTIME_DIR/wtfrc/coach.fifo && echo ready",
+		fmt.Sprintf("test -p %s/coach.fifo && echo ready", guestRuntimeDir),
 		"ready",
 		15*time.Second,
 	)
@@ -105,8 +128,17 @@ func setupCoachEnvironment(ctx context.Context) error {
 }
 
 // run is a helper that executes a command on the guest and fails the test on error.
+// It ensures XDG_RUNTIME_DIR is set so shell commands can reference $XDG_RUNTIME_DIR/wtfrc.
 func run(t *testing.T, ctx context.Context, cmd string) string {
 	t.Helper()
+	// Prefix command with XDG_RUNTIME_DIR export if guestRuntimeDir is known.
+	// This ensures $XDG_RUNTIME_DIR/wtfrc resolves correctly even in SSH sessions
+	// where the variable is not set by default.
+	if guestRuntimeDir != "" {
+		// guestRuntimeDir already includes /wtfrc suffix; extract the parent for XDG_RUNTIME_DIR
+		xdgDir := strings.TrimSuffix(guestRuntimeDir, "/wtfrc")
+		cmd = fmt.Sprintf("export XDG_RUNTIME_DIR=%s; %s", xdgDir, cmd)
+	}
 	stdout, stderr, err := testHarness.RunOnGuest(ctx, cmd)
 	if err != nil {
 		t.Fatalf("command %q failed: %v\nstderr: %s", cmd, err, stderr)
