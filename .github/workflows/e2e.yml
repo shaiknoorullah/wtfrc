@@ -1,0 +1,77 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Enable KVM for QEMU acceleration
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
+
+      - name: Install QEMU and cloud-image-utils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils
+
+      # Cache the base Arch Linux cloud image
+      - name: Cache Arch cloud image
+        uses: actions/cache@v4
+        with:
+          path: e2e/.cache/arch-base.qcow2
+          key: arch-cloudimg-latest
+
+      # Cache the provisioned VM snapshot (invalidate on provisioning changes)
+      - name: Cache VM snapshot
+        uses: actions/cache@v4
+        with:
+          path: |
+            e2e/.cache/arch-e2e.qcow2
+            e2e/.cache/e2e_key
+            e2e/.cache/e2e_key.pub
+            e2e/.cache/seed.iso
+          key: e2e-vm-${{ hashFiles('e2e/image/**', 'e2e/scripts/build-image.sh') }}
+
+      - name: Build VM image
+        run: make e2e-image
+
+      - name: Build wtfrc binary
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o bin/wtfrc ./cmd/wtfrc
+          GOOS=linux GOARCH=amd64 go build -o bin/wtfrc-monitor ./cmd/wtfrc-monitor
+
+      - name: Run E2E tests
+        run: make e2e
+        timeout-minutes: 15
+
+      # Upload artifacts on failure for debugging
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e/.cache/*.log
+            e2e/.cache/qemu.pid
+          retention-days: 7

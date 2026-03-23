@@ -1,0 +1,65 @@
+#cloud-config
+# wtfrc E2E test VM provisioning via cloud-init
+# This file is used as the user-data for the Arch Linux cloud image.
+
+users:
+  - name: test
+    groups: [wheel, input]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/zsh
+    ssh_authorized_keys:
+      - ssh-ed25519 PLACEHOLDER_KEY_WILL_BE_REPLACED_AT_BUILD_TIME
+
+package_update: true
+
+packages:
+  - hyprland
+  - tmux
+  - neovim
+  - zsh
+  - dunst
+  - kitty
+  - waybar
+  - mesa
+  - socat
+  - dbus
+  - openssh
+  - git
+  - jq
+
+write_files:
+  # Auto-login on tty1
+  - path: /etc/systemd/system/getty@tty1.service.d/autologin.conf
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=-/usr/bin/agetty --autologin test --noclear %I $TERM
+
+  # Start Hyprland on login
+  - path: /home/test/.zprofile
+    content: |
+      if [ -z "$WAYLAND_DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+        exec Hyprland
+      fi
+    owner: test:test
+
+  # Load uinput module at boot
+  - path: /etc/modules-load.d/uinput.conf
+    content: |
+      uinput
+
+  # Set uinput permissions for input group
+  - path: /etc/udev/rules.d/99-uinput.rules
+    content: |
+      KERNEL=="uinput", GROUP="input", MODE="0660"
+
+  # Enable sshd
+  - path: /etc/ssh/sshd_config.d/e2e.conf
+    content: |
+      PasswordAuthentication no
+      PubkeyAuthentication yes
+
+runcmd:
+  - systemctl enable sshd
+  - chown -R test:test /home/test
+  - modprobe uinput

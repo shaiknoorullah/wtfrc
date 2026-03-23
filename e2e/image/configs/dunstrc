@@ -1,0 +1,22 @@
+# wtfrc E2E test dunst config
+
+[global]
+    monitor = 0
+    follow = none
+    width = 300
+    height = 100
+    offset = 10x30
+    transparency = 0
+    padding = 8
+    horizontal_padding = 8
+    frame_width = 1
+    sort = yes
+    idle_threshold = 0
+    font = Monospace 10
+    markup = full
+    format = "<b>%s</b>\n%b"
+    show_age_threshold = 60
+    word_wrap = yes
+    stack_duplicates = false
+    show_indicators = no
+    timeout = 10

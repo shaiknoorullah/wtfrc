@@ -1,0 +1,16 @@
+# wtfrc E2E test zsh config
+
+# Test aliases that wtfrc should coach on
+alias gs='git status'
+alias ll='ls -la'
+alias gp='git push'
+alias gd='git diff'
+alias dc='docker compose'
+
+# Source wtfrc coaching hooks if they exist
+if [[ -f ~/.config/wtfrc/coach.zsh ]]; then
+    source ~/.config/wtfrc/coach.zsh
+fi
+
+# Minimal prompt for testing
+PROMPT='%~ %# '
