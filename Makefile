@@ -41,14 +41,7 @@ e2e: build
 		echo "==> E2E tests skipped: no VM image available"; \
 	else \
 		echo "==> No local Hyprland, running in VM mode"; \
-		bash e2e/scripts/boot-vm.sh; \
-		scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-			-i e2e/.cache/e2e_key -P 2222 \
-			bin/wtfrc bin/wtfrc-monitor test@localhost:/usr/local/bin/; \
-		TEST_EXIT=0; \
-		go test -tags e2e -v -timeout 10m ./e2e/testcases/ || TEST_EXIT=$$?; \
-		bash e2e/scripts/stop-vm.sh; \
-		exit $$TEST_EXIT; \
+		go test -tags e2e -v -timeout 10m ./e2e/testcases/; \
 	fi
 
 e2e-shell:

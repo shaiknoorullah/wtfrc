@@ -163,6 +163,44 @@ func (h *Harness) setupVM(ctx context.Context) error {
 	}
 
 	fmt.Sscanf(pid, "%d", &h.qemuPID)
+
+	// Deploy wtfrc binaries to the guest
+	if err := h.deployBinaries(ctx); err != nil {
+		return fmt.Errorf("deploy binaries: %w", err)
+	}
+
+	return nil
+}
+
+// deployBinaries copies the wtfrc binaries from the host bin/ directory
+// to /usr/local/bin/ on the guest VM via SCP + sudo mv.
+func (h *Harness) deployBinaries(ctx context.Context) error {
+	// Find the project root (where bin/ lives)
+	projectRoot := filepath.Dir(findE2EDir())
+	binaries := []string{"wtfrc", "wtfrc-monitor"}
+
+	for _, bin := range binaries {
+		src := filepath.Join(projectRoot, "bin", bin)
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			return fmt.Errorf("binary not found: %s (run 'make build' first)", src)
+		}
+
+		// SCP to /tmp first (test user can write there)
+		tmpDst := fmt.Sprintf("/tmp/%s", bin)
+		if err := h.scpToGuest(ctx, src, tmpDst); err != nil {
+			return fmt.Errorf("scp %s: %w", bin, err)
+		}
+
+		// Move to /usr/local/bin with sudo
+		_, stderr, err := h.runSSH(ctx, fmt.Sprintf(
+			"sudo mv %s /usr/local/bin/%s && sudo chmod +x /usr/local/bin/%s",
+			tmpDst, bin, bin,
+		))
+		if err != nil {
+			return fmt.Errorf("install %s: %s: %w", bin, stderr, err)
+		}
+	}
+
 	return nil
 }
 
