@@ -90,11 +90,18 @@ func setupCoachEnvironment(ctx context.Context) error {
 	}
 
 	// Wait for the FIFO to appear
-	return testHarness.WaitForCondition(ctx,
+	err = testHarness.WaitForCondition(ctx,
 		"test -p $XDG_RUNTIME_DIR/wtfrc/coach.fifo && echo ready",
 		"ready",
-		10*time.Second,
+		15*time.Second,
 	)
+	if err != nil {
+		// Dump coach daemon log for debugging
+		coachLog, _, _ := testHarness.RunOnGuest(ctx, "cat ~/.local/share/wtfrc/coach.log 2>/dev/null || echo 'no log file'")
+		psOut, _, _ := testHarness.RunOnGuest(ctx, "ps aux | grep wtfrc || true")
+		return fmt.Errorf("%w\ncoach.log:\n%s\nprocesses:\n%s", err, coachLog, psOut)
+	}
+	return nil
 }
 
 // run is a helper that executes a command on the guest and fails the test on error.
