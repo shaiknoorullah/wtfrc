@@ -118,7 +118,7 @@ func TestTC01_ShellAliasCoaching(t *testing.T) {
 
 	// Type a suboptimal command (git status instead of gs alias)
 	// This writes directly to the FIFO as the shell preexec hook would
-	run(t, ctx, `printf 'shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'shell\tgit status\t\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for the coach message to appear
 	err := testHarness.WaitForCondition(ctx,
@@ -148,7 +148,7 @@ func TestTC02_KeybindNoCoaching(t *testing.T) {
 	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 
 	// Simulate a keybind event (as the interceptor would send)
-	run(t, ctx, `printf 'hyprland\tkb:movefocus_d\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tkb:movefocus_d\t\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Small delay for processing
 	time.Sleep(500 * time.Millisecond)
@@ -171,7 +171,7 @@ func TestTC03_MouseClickCoaching(t *testing.T) {
 
 	// Simulate a Hyprland activewindow result event WITHOUT a preceding keybind
 	// (this is what the correlator sees when the user clicks to focus)
-	run(t, ctx, `printf 'hyprland\tactivewindow\tkitty" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tactivewindow\tkitty\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for coaching to be processed
 	time.Sleep(500 * time.Millisecond)
@@ -193,7 +193,7 @@ func TestTC04_NeovimArrowCoaching(t *testing.T) {
 	defer cancel()
 
 	// Simulate a neovim arrow key event as the Lua plugin would write
-	run(t, ctx, `printf 'nvim\tarrow_down\tnormal" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'nvim\tarrow_down\tnormal\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for processing
 	time.Sleep(500 * time.Millisecond)
@@ -214,7 +214,7 @@ func TestTC05_TmuxMousePaneSwitch(t *testing.T) {
 	defer cancel()
 
 	// Simulate a tmux pane-changed event without keybind
-	run(t, ctx, `printf 'tmux\tpane-changed\t%%0" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'tmux\tpane-changed\t%%0\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for processing
 	time.Sleep(500 * time.Millisecond)
@@ -239,7 +239,7 @@ func TestTC06_Graduation(t *testing.T) {
 	// We simulate 7 optimal uses followed by 1 suboptimal use.
 
 	// Send suboptimal first to create the coaching_state row
-	run(t, ctx, `printf 'shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'shell\tgit status\t\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(300 * time.Millisecond)
 
 	// Verify coaching_state row exists
@@ -274,7 +274,7 @@ func TestTC07_BudgetExhaustion(t *testing.T) {
 
 	// Send multiple suboptimal commands rapidly
 	for i := 0; i < 10; i++ {
-		run(t, ctx, fmt.Sprintf(`printf 'shell\tgit status\titer%d" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`, i))
+		run(t, ctx, fmt.Sprintf(`printf 'shell\tgit status\titer%d\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`, i))
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -327,7 +327,7 @@ func TestTC09_ConfigReload(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Trigger a coaching event
-	run(t, ctx, `printf 'shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'shell\tgit status\t\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(500 * time.Millisecond)
 
 	// Check the mode of the new coaching_log entry
@@ -350,11 +350,11 @@ func TestTC10_InterceptorRoundTrip(t *testing.T) {
 
 	// Simulate an interceptor event: keybind notification followed by result event.
 	// The interceptor writes a kb: prefixed event to the FIFO.
-	run(t, ctx, `printf 'hyprland\tkb:workspace_2\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tkb:workspace_2\t\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(50 * time.Millisecond)
 
 	// The result event arrives from Hyprland socket2
-	run(t, ctx, `printf 'hyprland\tworkspace\t2" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tworkspace\t2\n' > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify the keybind was logged in usage_events
