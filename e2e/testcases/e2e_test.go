@@ -63,8 +63,10 @@ func setupCoachEnvironment(ctx context.Context) error {
 		return fmt.Errorf("wtfrc index: %s: %w", stderr, err)
 	}
 
-	// Start the coach daemon in the background
-	_, stderr, err = testHarness.RunOnGuest(ctx, "wtfrc coach start &")
+	// Start the coach daemon in the background.
+	// Use nohup with full fd redirection so SSH returns immediately.
+	_, stderr, err = testHarness.RunOnGuest(ctx,
+		"nohup wtfrc coach start </dev/null >~/.local/share/wtfrc/coach.log 2>&1 &")
 	if err != nil {
 		return fmt.Errorf("wtfrc coach start: %s: %w", stderr, err)
 	}
