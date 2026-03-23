@@ -132,8 +132,22 @@ func (h *Harness) setupLocal(_ context.Context) error {
 	return nil
 }
 
+// ErrSkipNoImage is returned when the VM image is not available.
+// Callers should treat this as a skip condition, not a failure.
+var ErrSkipNoImage = fmt.Errorf("VM image not available (run 'make e2e-image' first)")
+
 // setupVM boots the QEMU VM and waits for SSH.
 func (h *Harness) setupVM(ctx context.Context) error {
+	// Check that the VM image and SSH key exist before trying to boot
+	snapshot := filepath.Join(h.cacheDir, "arch-e2e.qcow2")
+	if _, err := os.Stat(snapshot); os.IsNotExist(err) {
+		return ErrSkipNoImage
+	}
+	sshKey := filepath.Join(h.cacheDir, "e2e_key")
+	if _, err := os.Stat(sshKey); os.IsNotExist(err) {
+		return ErrSkipNoImage
+	}
+
 	scriptPath := filepath.Join(findE2EDir(), "scripts", "boot-vm.sh")
 
 	cmd := exec.CommandContext(ctx, "bash", scriptPath, h.cacheDir)

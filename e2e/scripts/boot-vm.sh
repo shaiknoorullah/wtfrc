@@ -35,24 +35,43 @@ fi
 
 echo "==> Booting E2E VM..." >&2
 
+# Detect KVM availability
+ACCEL="kvm"
+CPU_OPT="-cpu host"
+if [[ ! -w /dev/kvm ]] 2>/dev/null; then
+    echo "==> /dev/kvm not available, falling back to TCG (slow)" >&2
+    ACCEL="tcg"
+    CPU_OPT=""
+fi
+
+# Run QEMU in the background (cannot combine -nographic with -daemonize).
+# Using -nographic with serial on stdio; redirect to log file and background.
 qemu-system-x86_64 \
-    -machine type=q35,accel=kvm \
-    -cpu host \
+    -machine "type=q35,accel=${ACCEL}" \
+    ${CPU_OPT} \
     -m 2048 \
     -smp 2 \
     -nographic \
     -drive file="$SNAPSHOT",if=virtio,format=qcow2,snapshot=on \
-    -device virtio-gpu-pci \
     -device virtio-net-pci,netdev=net0 \
     -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 \
-    -daemonize \
-    -pidfile "$QEMU_PIDFILE"
+    -serial mon:stdio \
+    </dev/null >"${CACHE_DIR}/qemu-console.log" 2>&1 &
 
-QEMU_PID=$(cat "$QEMU_PIDFILE")
+QEMU_PID=$!
+echo "$QEMU_PID" > "$QEMU_PIDFILE"
+
+# Verify QEMU actually started
+sleep 1
+if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+    echo "ERROR: QEMU process $QEMU_PID exited immediately. Check ${CACHE_DIR}/qemu-console.log" >&2
+    cat "${CACHE_DIR}/qemu-console.log" >&2 || true
+    exit 1
+fi
 
 # Wait for SSH readiness
 echo "==> Waiting for SSH (PID $QEMU_PID)..." >&2
-for i in $(seq 1 60); do
+for i in $(seq 1 90); do
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
            -o ConnectTimeout=2 -i "$SSH_KEY" -p "$SSH_PORT" \
            test@localhost "true" 2>/dev/null; then
@@ -60,9 +79,15 @@ for i in $(seq 1 60); do
         echo "$QEMU_PID"
         exit 0
     fi
+    # Check QEMU is still running
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        echo "ERROR: QEMU process died during boot. Console log:" >&2
+        tail -50 "${CACHE_DIR}/qemu-console.log" >&2 || true
+        exit 1
+    fi
     sleep 1
 done
 
-echo "ERROR: VM did not become ready within 60s" >&2
+echo "ERROR: VM did not become ready within 90s" >&2
 kill "$QEMU_PID" 2>/dev/null || true
 exit 1

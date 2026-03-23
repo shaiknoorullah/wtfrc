@@ -74,9 +74,19 @@ qemu-img resize "$SNAPSHOT" 10G
 
 # ---- Step 5: Boot for provisioning ----
 echo "==> Booting VM for provisioning (this may take a few minutes)..."
+
+# Detect KVM availability
+ACCEL="kvm"
+CPU_OPT="-cpu host"
+if [[ ! -w /dev/kvm ]] 2>/dev/null; then
+    echo "==> /dev/kvm not available, falling back to TCG (slow)"
+    ACCEL="tcg"
+    CPU_OPT=""
+fi
+
 qemu-system-x86_64 \
-    -machine type=q35,accel=kvm \
-    -cpu host \
+    -machine "type=q35,accel=${ACCEL}" \
+    ${CPU_OPT} \
     -m 2048 \
     -smp 2 \
     -nographic \
@@ -85,7 +95,7 @@ qemu-system-x86_64 \
     -device virtio-net-pci,netdev=net0 \
     -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 \
     -serial mon:stdio \
-    &
+    </dev/null >"${OUTPUT_DIR}/qemu-provision.log" 2>&1 &
 
 QEMU_PID=$!
 

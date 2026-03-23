@@ -28,7 +28,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          ls -la /dev/kvm
+          ls -la /dev/kvm || echo "WARNING: /dev/kvm not available"
 
       - name: Install QEMU and cloud-image-utils
         run: |
@@ -62,7 +62,9 @@ jobs:
           GOOS=linux GOARCH=amd64 go build -o bin/wtfrc-monitor ./cmd/wtfrc-monitor
 
       - name: Run E2E tests
-        run: make e2e
+        run: |
+          set -euo pipefail
+          make e2e
         timeout-minutes: 15
 
       # Upload artifacts on failure for debugging

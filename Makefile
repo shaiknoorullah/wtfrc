@@ -36,14 +36,19 @@ e2e: build
 	@if [ -n "$$HYPRLAND_INSTANCE_SIGNATURE" ] && [ -S "$$XDG_RUNTIME_DIR/hypr/$$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock" ]; then \
 		echo "==> Detected local Hyprland, running in local mode"; \
 		go test -tags e2e -v -timeout 10m ./e2e/testcases/; \
+	elif [ ! -f e2e/.cache/arch-e2e.qcow2 ] || [ ! -f e2e/.cache/e2e_key ]; then \
+		echo "==> SKIP: E2E VM image not found (run 'make e2e-image' first)"; \
+		echo "==> E2E tests skipped: no VM image available"; \
 	else \
 		echo "==> No local Hyprland, running in VM mode"; \
 		bash e2e/scripts/boot-vm.sh; \
 		scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 			-i e2e/.cache/e2e_key -P 2222 \
 			bin/wtfrc bin/wtfrc-monitor test@localhost:/usr/local/bin/; \
-		go test -tags e2e -v -timeout 10m ./e2e/testcases/; \
+		TEST_EXIT=0; \
+		go test -tags e2e -v -timeout 10m ./e2e/testcases/ || TEST_EXIT=$$?; \
 		bash e2e/scripts/stop-vm.sh; \
+		exit $$TEST_EXIT; \
 	fi
 
 e2e-shell:

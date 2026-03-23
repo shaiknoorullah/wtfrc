@@ -9,6 +9,7 @@ package testcases
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -32,6 +33,11 @@ func TestMain(m *testing.M) {
 	defer cancel()
 
 	if err := testHarness.Setup(ctx); err != nil {
+		if errors.Is(err, harness.ErrSkipNoImage) {
+			fmt.Fprintf(os.Stderr, "SKIP: %v\n", err)
+			fmt.Fprintf(os.Stderr, "E2E tests skipped: no VM image available\n")
+			os.Exit(0)
+		}
 		fmt.Fprintf(os.Stderr, "FATAL: failed to set up harness: %v\n", err)
 		os.Exit(1)
 	}
