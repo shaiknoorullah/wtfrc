@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -58,15 +59,31 @@ func TestMain(m *testing.M) {
 
 // setupCoachEnvironment deploys the wtfrc binary and starts the coach daemon.
 func setupCoachEnvironment(ctx context.Context) error {
-	// Index the knowledge base
-	_, stderr, err := testHarness.RunOnGuest(ctx, "wtfrc index")
-	if err != nil {
-		return fmt.Errorf("wtfrc index: %s: %w", stderr, err)
+	// Ensure data directory and DB exist with schema
+	_, _, _ = testHarness.RunOnGuest(ctx, "mkdir -p ~/.local/share/wtfrc")
+	_, _, _ = testHarness.RunOnGuest(ctx, "wtfrc index 2>/dev/null || true")
+
+	// Seed known test aliases directly into the KB so tests don't depend on LLM enrichment.
+	// The shell parser extracts aliases with type "alias": raw_binding = alias name, raw_action = expansion.
+	seedCmds := []string{
+		`sqlite3 ~/.local/share/wtfrc/kb.db "INSERT OR IGNORE INTO entries (tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash) VALUES ('zsh', 'alias', 'gs', 'git status', 'git status alias', '/home/test/.zshrc', 4, 'shell', '[]', datetime('now'), 'seed')"`,
+		`sqlite3 ~/.local/share/wtfrc/kb.db "INSERT OR IGNORE INTO entries (tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash) VALUES ('zsh', 'alias', 'll', 'ls -la', 'list files alias', '/home/test/.zshrc', 5, 'shell', '[]', datetime('now'), 'seed')"`,
+		`sqlite3 ~/.local/share/wtfrc/kb.db "INSERT OR IGNORE INTO entries (tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash) VALUES ('zsh', 'alias', 'gp', 'git push', 'git push alias', '/home/test/.zshrc', 6, 'shell', '[]', datetime('now'), 'seed')"`,
+		`sqlite3 ~/.local/share/wtfrc/kb.db "INSERT OR IGNORE INTO entries (tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash) VALUES ('zsh', 'alias', 'gd', 'git diff', 'git diff alias', '/home/test/.zshrc', 7, 'shell', '[]', datetime('now'), 'seed')"`,
 	}
+	for _, cmd := range seedCmds {
+		_, stderr, err := testHarness.RunOnGuest(ctx, cmd)
+		if err != nil {
+			return fmt.Errorf("seed KB: %s: %w", stderr, err)
+		}
+	}
+	// Verify seeding worked
+	countOut, _, _ := testHarness.RunOnGuest(ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM entries WHERE type='alias'"`)
+	log.Printf("Seeded KB: %s alias entries", strings.TrimSpace(countOut))
 
 	// Start the coach daemon in the background.
 	// Use nohup with full fd redirection so SSH returns immediately.
-	_, stderr, err = testHarness.RunOnGuest(ctx,
+	_, stderr, err := testHarness.RunOnGuest(ctx,
 		"nohup wtfrc coach start </dev/null >~/.local/share/wtfrc/coach.log 2>&1 &")
 	if err != nil {
 		return fmt.Errorf("wtfrc coach start: %s: %w", stderr, err)
@@ -96,19 +113,12 @@ func TestTC01_ShellAliasCoaching(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Check if KB has any entries; if empty, coaching cannot fire.
-	kbCount, _, _ := testHarness.RunOnGuest(ctx,
-		`sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM entries" 2>/dev/null || echo "0"`)
-	if strings.TrimSpace(kbCount) == "0" {
-		t.Skip("TC01 SKIP: knowledge base is empty (no LLM available for indexing); coaching cannot fire")
-	}
-
 	// Clear any previous coaching messages
 	run(t, ctx, "rm -f $XDG_RUNTIME_DIR/wtfrc/coach-msg")
 
 	// Type a suboptimal command (git status instead of gs alias)
 	// This writes directly to the FIFO as the shell preexec hook would
-	run(t, ctx, `echo -e "shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for the coach message to appear
 	err := testHarness.WaitForCondition(ctx,
@@ -138,7 +148,7 @@ func TestTC02_KeybindNoCoaching(t *testing.T) {
 	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 
 	// Simulate a keybind event (as the interceptor would send)
-	run(t, ctx, `echo -e "hyprland\tkb:movefocus_d\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tkb:movefocus_d\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Small delay for processing
 	time.Sleep(500 * time.Millisecond)
@@ -161,7 +171,7 @@ func TestTC03_MouseClickCoaching(t *testing.T) {
 
 	// Simulate a Hyprland activewindow result event WITHOUT a preceding keybind
 	// (this is what the correlator sees when the user clicks to focus)
-	run(t, ctx, `echo -e "hyprland\tactivewindow\tkitty" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tactivewindow\tkitty" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for coaching to be processed
 	time.Sleep(500 * time.Millisecond)
@@ -183,7 +193,7 @@ func TestTC04_NeovimArrowCoaching(t *testing.T) {
 	defer cancel()
 
 	// Simulate a neovim arrow key event as the Lua plugin would write
-	run(t, ctx, `echo -e "nvim\tarrow_down\tnormal" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'nvim\tarrow_down\tnormal" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for processing
 	time.Sleep(500 * time.Millisecond)
@@ -204,7 +214,7 @@ func TestTC05_TmuxMousePaneSwitch(t *testing.T) {
 	defer cancel()
 
 	// Simulate a tmux pane-changed event without keybind
-	run(t, ctx, `echo -e "tmux\tpane-changed\t%%0" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'tmux\tpane-changed\t%%0" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 
 	// Wait for processing
 	time.Sleep(500 * time.Millisecond)
@@ -229,7 +239,7 @@ func TestTC06_Graduation(t *testing.T) {
 	// We simulate 7 optimal uses followed by 1 suboptimal use.
 
 	// Send suboptimal first to create the coaching_state row
-	run(t, ctx, `echo -e "shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(300 * time.Millisecond)
 
 	// Verify coaching_state row exists
@@ -264,7 +274,7 @@ func TestTC07_BudgetExhaustion(t *testing.T) {
 
 	// Send multiple suboptimal commands rapidly
 	for i := 0; i < 10; i++ {
-		run(t, ctx, fmt.Sprintf(`echo -e "shell\tgit status\titer%d" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`, i))
+		run(t, ctx, fmt.Sprintf(`printf 'shell\tgit status\titer%d" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`, i))
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -317,7 +327,7 @@ func TestTC09_ConfigReload(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Trigger a coaching event
-	run(t, ctx, `echo -e "shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'shell\tgit status\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(500 * time.Millisecond)
 
 	// Check the mode of the new coaching_log entry
@@ -340,11 +350,11 @@ func TestTC10_InterceptorRoundTrip(t *testing.T) {
 
 	// Simulate an interceptor event: keybind notification followed by result event.
 	// The interceptor writes a kb: prefixed event to the FIFO.
-	run(t, ctx, `echo -e "hyprland\tkb:workspace_2\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tkb:workspace_2\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(50 * time.Millisecond)
 
 	// The result event arrives from Hyprland socket2
-	run(t, ctx, `echo -e "hyprland\tworkspace\t2" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
+	run(t, ctx, `printf 'hyprland\tworkspace\t2" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify the keybind was logged in usage_events
