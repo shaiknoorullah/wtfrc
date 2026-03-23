@@ -116,11 +116,27 @@ for i in $(seq 1 120); do
     sleep 1
 done
 
-# ---- Step 6: Copy tool configs ----
-echo "==> Copying tool configs to guest..."
 CONFIGS_DIR="${E2E_DIR}/image/configs"
 SSH_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $SSH_KEY -p $SSH_PORT test@localhost"
 SCP_CMD="scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $SSH_KEY -P $SSH_PORT"
+
+# Wait for cloud-init to finish (it sets up users, packages, permissions)
+echo "==> Waiting for cloud-init to complete..."
+for i in $(seq 1 300); do
+    if $SSH_CMD "test -f /var/lib/cloud/instance/boot-finished" 2>/dev/null; then
+        echo "==> Cloud-init complete"
+        break
+    fi
+    if [[ $i -eq 300 ]]; then
+        echo "ERROR: cloud-init did not finish within 300s"
+        kill $QEMU_PID 2>/dev/null || true
+        exit 1
+    fi
+    sleep 1
+done
+
+# ---- Step 6: Copy tool configs ----
+echo "==> Copying tool configs to guest..."
 
 $SSH_CMD "mkdir -p ~/.config/hypr ~/.config/nvim ~/.config/dunst ~/.config/tmux"
 $SCP_CMD "${CONFIGS_DIR}/hyprland.conf" "test@localhost:~/.config/hypr/hyprland.conf"
