@@ -113,7 +113,7 @@ func TestTC01_ShellAliasCoaching(t *testing.T) {
 	}
 
 	// Verify coaching_log has an entry
-	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT optimal_action FROM coaching_log ORDER BY id DESC LIMIT 1"`)
+	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT optimal_action FROM coaching_log ORDER BY id DESC LIMIT 1"`)
 	if out == "" {
 		t.Fatal("coaching_log is empty, expected entry with optimal_action")
 	}
@@ -127,7 +127,7 @@ func TestTC02_KeybindNoCoaching(t *testing.T) {
 	defer cancel()
 
 	// Record the current coaching_log count
-	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log"`)
+	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 
 	// Simulate a keybind event (as the interceptor would send)
 	run(t, ctx, `echo -e "hyprland\tkb:movefocus_d\t" > $XDG_RUNTIME_DIR/wtfrc/coach.fifo`)
@@ -136,7 +136,7 @@ func TestTC02_KeybindNoCoaching(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify coaching_log count did not increase
-	countAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log"`)
+	countAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 	if countBefore != countAfter {
 		t.Fatalf("coaching_log count changed from %s to %s; keybind should not trigger coaching",
 			countBefore, countAfter)
@@ -159,7 +159,7 @@ func TestTC03_MouseClickCoaching(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Check that a coaching_log entry was created for hyprland source
-	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log WHERE source='hyprland'"`)
+	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log WHERE source='hyprland'"`)
 	if out == "0\n" || out == "0" {
 		t.Log("TC03 INFO: no hyprland coaching_log entry (may not have matching keybind in KB)")
 		t.Log("TC03: this test validates the correlator path; coaching depends on KB content")
@@ -181,7 +181,7 @@ func TestTC04_NeovimArrowCoaching(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Check for coaching_log entry from nvim
-	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log WHERE source='nvim'"`)
+	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log WHERE source='nvim'"`)
 	if out == "0\n" || out == "0" {
 		t.Log("TC04 INFO: no nvim coaching_log entry (may need arrow->hjkl mapping in KB)")
 	} else {
@@ -202,7 +202,7 @@ func TestTC05_TmuxMousePaneSwitch(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Check for coaching_log entry from tmux
-	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log WHERE source='tmux'"`)
+	out := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log WHERE source='tmux'"`)
 	if out == "0\n" || out == "0" {
 		t.Log("TC05 INFO: no tmux coaching_log entry (may need pane-switch keybind in KB)")
 	} else {
@@ -225,7 +225,7 @@ func TestTC06_Graduation(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Verify coaching_state row exists
-	state := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT state FROM coaching_state WHERE action_id='zsh:gs'" 2>/dev/null || echo ""`)
+	state := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT state FROM coaching_state WHERE action_id='zsh:gs'" 2>/dev/null || echo ""`)
 	if state == "" {
 		t.Log("TC06 INFO: no coaching_state row for zsh:gs; graduation test requires matching alias")
 		return
@@ -236,12 +236,12 @@ func TestTC06_Graduation(t *testing.T) {
 	// Simulate 7 optimal uses by recording them via the adoption tracking
 	for i := 0; i < 7; i++ {
 		// Record an optimal use (the user typed 'gs' instead of 'git status')
-		run(t, ctx, fmt.Sprintf(`sqlite3 ~/.local/share/wtfrc/wtfrc.db "UPDATE coaching_state SET consecutive_optimal = %d WHERE action_id='zsh:gs'"`, i+1))
+		run(t, ctx, fmt.Sprintf(`sqlite3 ~/.local/share/wtfrc/kb.db "UPDATE coaching_state SET consecutive_optimal = %d WHERE action_id='zsh:gs'"`, i+1))
 		time.Sleep(50 * time.Millisecond)
 	}
 
 	// Check state after simulated optimal uses
-	finalState := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT state, consecutive_optimal FROM coaching_state WHERE action_id='zsh:gs'"`)
+	finalState := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT state, consecutive_optimal FROM coaching_state WHERE action_id='zsh:gs'"`)
 	t.Logf("TC06: final state = %s", finalState)
 }
 
@@ -252,7 +252,7 @@ func TestTC07_BudgetExhaustion(t *testing.T) {
 	defer cancel()
 
 	// Record coaching_log count before
-	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log"`)
+	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 
 	// Send multiple suboptimal commands rapidly
 	for i := 0; i < 10; i++ {
@@ -264,8 +264,8 @@ func TestTC07_BudgetExhaustion(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Check that not all commands were coached (budget should have kicked in)
-	countAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log"`)
-	usageCount := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM usage_events"`)
+	countAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
+	usageCount := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM usage_events"`)
 
 	t.Logf("TC07: coaching_log before=%s after=%s usage_events=%s",
 		countBefore, countAfter, usageCount)
@@ -298,7 +298,7 @@ func TestTC09_ConfigReload(t *testing.T) {
 	defer cancel()
 
 	// Get the current mode from the last coaching_log entry
-	modeBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT mode FROM coaching_log ORDER BY id DESC LIMIT 1" 2>/dev/null || echo ""`)
+	modeBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT mode FROM coaching_log ORDER BY id DESC LIMIT 1" 2>/dev/null || echo ""`)
 	t.Logf("TC09: mode before reload = %s", modeBefore)
 
 	// Change config to moderate mode
@@ -313,7 +313,7 @@ func TestTC09_ConfigReload(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Check the mode of the new coaching_log entry
-	modeAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT mode FROM coaching_log ORDER BY id DESC LIMIT 1" 2>/dev/null || echo ""`)
+	modeAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT mode FROM coaching_log ORDER BY id DESC LIMIT 1" 2>/dev/null || echo ""`)
 	t.Logf("TC09: mode after reload = %s", modeAfter)
 
 	// Restore config
@@ -328,7 +328,7 @@ func TestTC10_InterceptorRoundTrip(t *testing.T) {
 	defer cancel()
 
 	// Record coaching_log count
-	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log"`)
+	countBefore := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 
 	// Simulate an interceptor event: keybind notification followed by result event.
 	// The interceptor writes a kb: prefixed event to the FIFO.
@@ -340,11 +340,11 @@ func TestTC10_InterceptorRoundTrip(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify the keybind was logged in usage_events
-	usageOut := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM usage_events WHERE action LIKE '%workspace%'"`)
+	usageOut := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM usage_events WHERE action LIKE '%workspace%'"`)
 	t.Logf("TC10: usage_events with workspace = %s", usageOut)
 
 	// Verify no coaching was generated (keybind was paired with result)
-	countAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/wtfrc.db "SELECT count(*) FROM coaching_log"`)
+	countAfter := run(t, ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log"`)
 	if countBefore != countAfter {
 		t.Logf("TC10 WARN: coaching_log count changed %s -> %s (correlator may not have paired)",
 			countBefore, countAfter)
