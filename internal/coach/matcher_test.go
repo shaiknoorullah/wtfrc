@@ -218,3 +218,66 @@ func TestMatchSourceFile(t *testing.T) {
 		t.Errorf("SourceLine = %d, want %d", got.SourceLine, 42)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TestMatchFromDB — replicates the E2E scenario: seed DB via SQL, read entries
+// via GetEntriesByTypes, build Matcher, verify it matches "git status" → "gs".
+// ---------------------------------------------------------------------------
+
+func TestMatchFromDB(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/test_matcher.db"
+	db, err := kb.Open(dbPath)
+	if err != nil {
+		t.Fatalf("kb.Open: %v", err)
+	}
+	defer db.Close()
+
+	// Seed entries via raw SQL, exactly as the E2E test does.
+	conn := db.Conn()
+	_, err = conn.Exec(`INSERT INTO entries (tool, type, raw_binding, raw_action, description, source_file, source_line, category, see_also, indexed_at, file_hash)
+		VALUES ('zsh', 'alias', 'gs', 'git status', 'git status alias', '/home/test/.zshrc', 4, 'shell', '[]', '2025-01-01T00:00:00Z', 'seed')`)
+	if err != nil {
+		t.Fatalf("seed entry: %v", err)
+	}
+
+	// Read entries via the same method the daemon uses.
+	entries, err := db.GetEntriesByTypes([]string{"alias", "function", "keybind"})
+	if err != nil {
+		t.Fatalf("GetEntriesByTypes: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("GetEntriesByTypes returned 0 entries")
+	}
+
+	// Verify the entry fields are populated correctly.
+	e := entries[0]
+	if e.RawBinding == nil {
+		t.Fatal("RawBinding is nil after DB scan")
+	}
+	if e.RawAction == nil {
+		t.Fatal("RawAction is nil after DB scan")
+	}
+	if *e.RawBinding != "gs" {
+		t.Errorf("RawBinding = %q, want %q", *e.RawBinding, "gs")
+	}
+	if *e.RawAction != "git status" {
+		t.Errorf("RawAction = %q, want %q", *e.RawAction, "git status")
+	}
+
+	// Build matcher and verify the match works.
+	m := NewMatcher(entries)
+	got := m.Match(SourceShell, "git status")
+	if got == nil {
+		t.Fatal("Match(shell, 'git status') returned nil; expected suggestion for 'gs'")
+	}
+	if got.Optimal != "gs" {
+		t.Errorf("Optimal = %q, want %q", got.Optimal, "gs")
+	}
+	if got.ActionID != "zsh:gs" {
+		t.Errorf("ActionID = %q, want %q", got.ActionID, "zsh:gs")
+	}
+	if got.KeysSaved != 8 {
+		t.Errorf("KeysSaved = %d, want 8", got.KeysSaved)
+	}
+}

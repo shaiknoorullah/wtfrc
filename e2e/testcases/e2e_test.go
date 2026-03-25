@@ -85,6 +85,30 @@ func setupCoachEnvironment(ctx context.Context) error {
 	countOut, _, _ := testHarness.RunOnGuest(ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM entries WHERE type='alias'"`)
 	log.Printf("Seeded KB: %s alias entries", strings.TrimSpace(countOut))
 
+	// Write a permissive config that disables quiet hours and cooldown so tests
+	// run reliably regardless of the guest clock.
+	_, _, _ = testHarness.RunOnGuest(ctx, "mkdir -p ~/.config/wtfrc")
+	_, cfgStderr, cfgErr := testHarness.RunOnGuest(ctx, `cat > ~/.config/wtfrc/config.toml << 'CFGEOF'
+[coach]
+enabled = true
+mode = "chill"
+budget_per_hour = 1000
+cooldown_seconds = 0
+quiet_hours = ""
+focus_category = ""
+graduation_streak = 7
+
+[coach.delivery]
+shell = "inline"
+hyprland = "dunst"
+tmux = "status"
+neovim = "notify"
+default = "dunst"
+CFGEOF`)
+	if cfgErr != nil {
+		return fmt.Errorf("write test config: %s: %w", cfgStderr, cfgErr)
+	}
+
 	// Ensure XDG_RUNTIME_DIR is set on the guest. SSH sessions may not have it.
 	// The daemon and all tests need it to find the FIFO and other runtime files.
 	_, _, _ = testHarness.RunOnGuest(ctx,
@@ -171,15 +195,15 @@ func TestTC01_ShellAliasCoaching(t *testing.T) {
 		if strings.TrimSpace(usageCount) == "0" {
 			t.Fatal("TC01: event was not recorded in usage_events; daemon may not be processing events")
 		}
-		// Event was received but coaching didn't fire. This can happen when the
-		// Matcher can't find a match (e.g., duplicate entries confuse the lookup).
-		// Log diagnostics and skip rather than fail the infrastructure test.
+		// Event was received but coaching didn't fire.
+		// Gather diagnostics to help debug the pipeline.
 		entryCount, _, _ := testHarness.RunOnGuest(ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM entries WHERE type='alias'" 2>/dev/null || echo 'err'`)
 		coachLogCount, _, _ := testHarness.RunOnGuest(ctx, `sqlite3 ~/.local/share/wtfrc/kb.db "SELECT count(*) FROM coaching_log" 2>/dev/null || echo 'err'`)
+		coachLog, _, _ := testHarness.RunOnGuest(ctx, "tail -20 ~/.local/share/wtfrc/coach.log 2>/dev/null || echo 'no log'")
 		t.Logf("TC01: event received (usage_events=%s) but no coaching generated (coaching_log=%s, entries=%s)",
 			strings.TrimSpace(usageCount), strings.TrimSpace(coachLogCount), strings.TrimSpace(entryCount))
-		t.Skip("TC01 SKIP: coaching pipeline did not produce a message; Matcher may need investigation")
-		return
+		t.Logf("TC01: coach daemon log:\n%s", coachLog)
+		t.Fatal("TC01: coaching pipeline did not produce a message for 'git status' -> 'gs'")
 	}
 
 	// Verify coaching_log has an entry
