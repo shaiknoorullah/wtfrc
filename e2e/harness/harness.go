@@ -6,6 +6,7 @@ package harness
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,10 +24,11 @@ type VMConfig struct {
 
 // Harness manages the E2E test environment.
 type Harness struct {
-	cfg      VMConfig
-	qemuPID  int
-	isLocal  bool
-	cacheDir string
+	cfg               VMConfig
+	qemuPID           int
+	isLocal           bool
+	cacheDir          string
+	originalWorkspace string // saved workspace name to restore on teardown (local mode)
 }
 
 // New creates a new Harness. It auto-detects whether to use local Hyprland
@@ -75,7 +77,7 @@ func (h *Harness) Setup(ctx context.Context) error {
 // Teardown cleans up the test environment.
 func (h *Harness) Teardown() error {
 	if h.isLocal {
-		return nil
+		return h.teardownLocal()
 	}
 	return h.stopVM()
 }
@@ -123,11 +125,61 @@ func (h *Harness) WaitForCondition(ctx context.Context, command, expected string
 		timeout, command, expected, lastOutput)
 }
 
-// setupLocal verifies the local Hyprland environment is usable for testing.
+// setupLocal verifies the local Hyprland environment is usable for testing
+// and creates a dedicated workspace to avoid interfering with the developer's session.
 func (h *Harness) setupLocal(_ context.Context) error {
 	// Verify hyprctl is available
 	if _, err := exec.LookPath("hyprctl"); err != nil {
 		return fmt.Errorf("hyprctl not found: %w", err)
+	}
+
+	// Query the current active workspace so we can restore it on teardown.
+	out, err := exec.Command("hyprctl", "-j", "activeworkspace").Output()
+	if err != nil {
+		return fmt.Errorf("query active workspace: %w", err)
+	}
+	var ws struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(out, &ws); err != nil {
+		return fmt.Errorf("parse active workspace: %w", err)
+	}
+	h.originalWorkspace = ws.Name
+
+	// Create and switch to a dedicated test workspace.
+	if err := exec.Command("hyprctl", "dispatch", "workspace", "name:wtfrc-test").Run(); err != nil {
+		return fmt.Errorf("create test workspace: %w", err)
+	}
+
+	return nil
+}
+
+// teardownLocal switches back to the original workspace and closes the test workspace.
+func (h *Harness) teardownLocal() error {
+	var errs []string
+
+	// Switch back to the original workspace.
+	if h.originalWorkspace != "" {
+		if err := exec.Command("hyprctl", "dispatch", "workspace", "name:"+h.originalWorkspace).Run(); err != nil {
+			errs = append(errs, fmt.Sprintf("restore workspace %q: %v", h.originalWorkspace, err))
+		}
+	}
+
+	// Close any windows left in the test workspace, then remove it.
+	// Moving to a different workspace first (done above) means clients on wtfrc-test
+	// can be closed without focus issues. We use focusworkspaceoncurrentmonitor to avoid
+	// interfering if the user has multiple monitors.
+	// hyprctl does not have a "close workspace" command, but an empty workspace is
+	// automatically destroyed by Hyprland when it has no clients. We just need to
+	// make sure any straggler windows are closed.
+	_ = exec.Command("bash", "-c",
+		`hyprctl -j clients | `+
+			`jq -r '.[] | select(.workspace.name=="wtfrc-test") | .address' | `+
+			`while read addr; do hyprctl dispatch closewindow address:"$addr"; done`,
+	).Run()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("teardown local: %s", strings.Join(errs, "; "))
 	}
 	return nil
 }
@@ -177,7 +229,7 @@ func (h *Harness) setupVM(ctx context.Context) error {
 func (h *Harness) deployBinaries(ctx context.Context) error {
 	// Find the project root (where bin/ lives)
 	projectRoot := filepath.Dir(findE2EDir())
-	binaries := []string{"wtfrc", "wtfrc-monitor"}
+	binaries := []string{"wtfrc", "wtfrc-monitor", "wtfrc-agent"}
 
 	for _, bin := range binaries {
 		src := filepath.Join(projectRoot, "bin", bin)
@@ -250,9 +302,21 @@ func (h *Harness) scpToGuest(ctx context.Context, src, dst string) error {
 	return cmd.Run()
 }
 
-// runLocal executes a command on the local machine.
+// runLocal executes a command on the local machine with XDG_RUNTIME_DIR set.
 func (h *Harness) runLocal(ctx context.Context, command string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+
+	// Inherit the current environment and ensure XDG_RUNTIME_DIR is set.
+	// Some test commands reference $XDG_RUNTIME_DIR and it may not be
+	// propagated through the exec environment by default.
+	cmd.Env = os.Environ()
+	xdgDir := os.Getenv("XDG_RUNTIME_DIR")
+	if xdgDir == "" {
+		// Fallback to the conventional path.
+		xdgDir = fmt.Sprintf("/run/user/%d", os.Getuid())
+	}
+	cmd.Env = append(cmd.Env, "XDG_RUNTIME_DIR="+xdgDir)
+
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
