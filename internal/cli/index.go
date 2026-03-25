@@ -156,7 +156,7 @@ func expandPaths(paths []string) ([]string, error) {
 			continue
 		}
 
-		filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
+		_ = filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return nil
 			}

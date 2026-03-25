@@ -25,21 +25,21 @@ func NewInput() Input {
 	}
 }
 
-func (i Input) Init() tea.Cmd {
+func (i *Input) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (i Input) Update(msg tea.Msg) (Input, tea.Cmd) {
+func (i *Input) Update(msg tea.Msg) (Input, tea.Cmd) {
 	var cmd tea.Cmd
 	i.textInput, cmd = i.textInput.Update(msg)
-	return i, cmd
+	return *i, cmd
 }
 
-func (i Input) View() string {
+func (i *Input) View() string {
 	return i.textInput.View()
 }
 
-func (i Input) Value() string {
+func (i *Input) Value() string {
 	return i.textInput.Value()
 }
 

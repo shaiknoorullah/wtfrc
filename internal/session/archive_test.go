@@ -47,7 +47,7 @@ func TestArchive(t *testing.T) {
 			Timestamp:      started.Add(5 * time.Minute),
 			Issues:         []string{"slow"},
 		}
-		if err := mgr.LogQuery(sess.ID, q); err != nil {
+		if err := mgr.LogQuery(sess.ID, &q); err != nil {
 			t.Fatalf("LogQuery: %v", err)
 		}
 	}

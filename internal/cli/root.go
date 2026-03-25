@@ -18,7 +18,8 @@ your setup using a local LLM.
   wtfrc stats      Show knowledge base and usage statistics
   wtfrc doctor     Run health checks on your setup
   wtfrc config     View or initialize the config file
-  wtfrc supervise  Run supervisor hallucination review`,
+  wtfrc supervise  Run supervisor hallucination review
+  wtfrc coach      Real-time coaching daemon and management`,
 }
 
 func Execute() error {

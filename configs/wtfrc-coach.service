@@ -1,0 +1,17 @@
+[Unit]
+Description=wtfrc Coach daemon
+Documentation=https://github.com/shaiknoorullah/wtfrc
+After=graphical-session.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/wtfrc coach start
+ExecReload=/bin/kill -HUP $MAINPID
+WatchdogSec=30s
+Restart=on-failure
+RestartSec=5
+NotifyAccess=main
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+
+[Install]
+WantedBy=default.target

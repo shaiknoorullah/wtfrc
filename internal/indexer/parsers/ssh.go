@@ -48,12 +48,13 @@ func (p *SSHParser) Parse(path string) ([]RawEntry, error) {
 		user := current.user
 		var action string
 
-		if hostname == "" {
+		switch {
+		case hostname == "":
 			// No hostname set (e.g. wildcard Host *)
 			action = fmt.Sprintf("%s -> %s", current.name, current.name)
-		} else if user != "" {
+		case user != "":
 			action = fmt.Sprintf("%s -> %s (%s@%s)", current.name, hostname, user, hostname)
-		} else {
+		default:
 			action = fmt.Sprintf("%s -> %s", current.name, hostname)
 		}
 

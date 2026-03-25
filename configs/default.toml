@@ -79,3 +79,40 @@ never_index = [
   "~/.aws/credentials",
   "**/.env",
 ]
+
+[coach]
+# Enable or disable the coaching daemon.
+enabled = true
+# Coaching mode: chill (gentle nudges), moderate, or strict.
+mode = "chill"
+# Maximum number of coaching nudges per hour across all sources.
+budget_per_hour = 5
+# Minimum seconds between nudges for the same action.
+cooldown_seconds = 120
+# Quiet hours: no nudges during this range (HH:MM-HH:MM, 24h, empty = always active).
+quiet_hours = "22:00-08:00"
+# Restrict coaching to a single category ("" = all categories).
+focus_category = ""
+# Consecutive optimal uses required to graduate an action.
+graduation_streak = 7
+
+[coach.layer4]
+# Enable OS-level input monitor (evdev/uinput — requires privileges).
+enabled = false
+# Emit Shift-modifier characters when wrapping key events.
+emit_shift_chars = false
+
+[coach.delivery]
+# How to deliver coaching messages per source.
+# Options: inline (write to FIFO msg file), dunst, libnotify, waybar, tmux status, neovim notify.
+shell    = "inline"
+hyprland = "dunst"
+tmux     = "status"
+neovim   = "notify"
+default  = "dunst"
+# Waybar custom signal number for the coach module.
+waybar_signal = 8
+
+[coach.personality]
+# Optional custom system-prompt suffix injected into Roaster LLM calls.
+custom_prompt = ""

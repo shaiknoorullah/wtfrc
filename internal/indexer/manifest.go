@@ -58,7 +58,7 @@ func (m *Manifest) IsChanged(path string) (bool, error) {
 }
 
 // Update upserts a manifest entry for the given file.
-func (m *Manifest) Update(entry kb.ManifestEntry) error {
+func (m *Manifest) Update(entry *kb.ManifestEntry) error {
 	_, err := m.db.Conn().Exec(
 		`INSERT INTO manifest (file_path, sha256, mtime, last_indexed, entry_count)
 		 VALUES (?, ?, ?, ?, ?)

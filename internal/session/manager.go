@@ -40,7 +40,7 @@ func (m *Manager) StartSession(modelUsed string) (*kb.Session, error) {
 }
 
 // LogQuery inserts a query row and increments the session's query_count.
-func (m *Manager) LogQuery(sessionID string, q kb.Query) error {
+func (m *Manager) LogQuery(sessionID string, q *kb.Query) error {
 	entriesJSON, err := json.Marshal(q.EntriesUsed)
 	if err != nil {
 		return fmt.Errorf("marshal entries_used: %w", err)
@@ -55,7 +55,7 @@ func (m *Manager) LogQuery(sessionID string, q kb.Query) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.Exec(
 		`INSERT INTO queries (session_id, question, answer, entries_used, response_time_ms, timestamp, accuracy_score, issues)
@@ -215,10 +215,10 @@ func scanQueries(rows interface {
 		q.AccuracyScore = accScore
 
 		if entriesJSON != nil && *entriesJSON != "" {
-			json.Unmarshal([]byte(*entriesJSON), &q.EntriesUsed)
+			_ = json.Unmarshal([]byte(*entriesJSON), &q.EntriesUsed)
 		}
 		if issuesJSON != nil && *issuesJSON != "" {
-			json.Unmarshal([]byte(*issuesJSON), &q.Issues)
+			_ = json.Unmarshal([]byte(*issuesJSON), &q.Issues)
 		}
 
 		queries = append(queries, q)

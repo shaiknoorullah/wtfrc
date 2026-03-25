@@ -68,7 +68,8 @@ func (s *Supervisor) Review(ctx context.Context) (*Report, error) {
 			return nil, fmt.Errorf("supervisor: get session %s: %w", sess.ID, err)
 		}
 
-		for _, q := range full.Queries {
+		for i := range full.Queries {
+			q := &full.Queries[i]
 			entries := s.loadEntries(q.EntriesUsed)
 
 			// Tier 1: deterministic checks.
@@ -134,13 +135,13 @@ func (s *Supervisor) loadEntries(ids []int64) []kb.KBEntry {
 
 // verifyAnswerDeterministic performs Tier-1 checks that need no LLM call.
 // It returns a list of issues found (empty means the answer looks OK).
-func (s *Supervisor) verifyAnswerDeterministic(q kb.Query, entries []kb.KBEntry) []string {
+func (s *Supervisor) verifyAnswerDeterministic(q *kb.Query, entries []kb.KBEntry) []string {
 	var issues []string
 
 	// Check that every entry ID cited actually exists in the DB.
 	found := make(map[int64]bool, len(entries))
-	for _, e := range entries {
-		found[e.ID] = true
+	for i := range entries {
+		found[entries[i].ID] = true
 	}
 	for _, id := range q.EntriesUsed {
 		if !found[id] {
@@ -164,7 +165,7 @@ func (s *Supervisor) verifyAnswerDeterministic(q kb.Query, entries []kb.KBEntry)
 }
 
 // needsLLMVerification decides whether Tier-2 should run.
-func (s *Supervisor) needsLLMVerification(q kb.Query, entries []kb.KBEntry, deterministicIssues []string) bool {
+func (s *Supervisor) needsLLMVerification(q *kb.Query, entries []kb.KBEntry, deterministicIssues []string) bool {
 	// If the provider is nil we cannot run the LLM tier.
 	if s.provider == nil {
 		return false
@@ -190,9 +191,10 @@ func (s *Supervisor) needsLLMVerification(q kb.Query, entries []kb.KBEntry, dete
 }
 
 // verifyAnswerLLM performs the Tier-2 LLM cross-check.
-func (s *Supervisor) verifyAnswerLLM(ctx context.Context, q kb.Query, entries []kb.KBEntry) (*LLMVerification, error) {
+func (s *Supervisor) verifyAnswerLLM(ctx context.Context, q *kb.Query, entries []kb.KBEntry) (*LLMVerification, error) {
 	var entryDescriptions strings.Builder
-	for _, e := range entries {
+	for i := range entries {
+		e := &entries[i]
 		entryDescriptions.WriteString(fmt.Sprintf("- ID %d: binding=%v action=%v desc=%s\n",
 			e.ID, ptrStr(e.RawBinding), ptrStr(e.RawAction), e.Description))
 	}
@@ -275,7 +277,8 @@ func extractAnswerRefs(answer string) []string {
 // fields of every cited entry, for simple substring matching.
 func collectEntryTexts(entries []kb.KBEntry) string {
 	var parts []string
-	for _, e := range entries {
+	for i := range entries {
+		e := &entries[i]
 		if e.RawBinding != nil {
 			parts = append(parts, *e.RawBinding)
 		}

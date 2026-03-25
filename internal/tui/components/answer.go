@@ -29,17 +29,17 @@ func NewAnswer() Answer {
 	}
 }
 
-func (a Answer) Init() tea.Cmd {
+func (a *Answer) Init() tea.Cmd {
 	return nil
 }
 
-func (a Answer) Update(msg tea.Msg) (Answer, tea.Cmd) {
+func (a *Answer) Update(msg tea.Msg) (Answer, tea.Cmd) {
 	var cmd tea.Cmd
 	a.viewport, cmd = a.viewport.Update(msg)
-	return a, cmd
+	return *a, cmd
 }
 
-func (a Answer) View() string {
+func (a *Answer) View() string {
 	content := a.viewport.View()
 	if len(a.sources) > 0 {
 		content += "\n" + a.renderSources()
